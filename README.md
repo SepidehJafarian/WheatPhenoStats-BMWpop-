@@ -4,7 +4,7 @@
  - In this project section, the 10 selected extreme lines regarding their CID measurements, were planted into the pots in the greenhouse.
 
  
--  all selected lines were driven from the MAGIC population and chosen based on the high genetic diversity, to represent their founders and the precision of 
+-  all selected lines were driven from the MAGIC population and chosen based on the high genetic diversity (to represent their founders) and the precision of 
    their measurement for CID (2 replication).
 
  
