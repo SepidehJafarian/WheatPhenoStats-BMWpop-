@@ -5,7 +5,7 @@
 
  
 -  all selected lines were driven from the MAGIC population and chosen based on the high genetic diversity (to represent their founders) and the precision of 
-   their measured (2 replications).
+   their measured CID (2 replications).
 
  
 -  all growth parameters of the plants were measured using a multispectral camera in the greenhouse (Phenospex).
