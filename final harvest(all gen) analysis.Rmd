@@ -1,0 +1,2852 @@
+---
+title: An R Markdown document converted from "C:/Users/SepidehJafarian/Desktop/final
+  harvest(all gen) analysis.ipynb"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(lme4)
+library(emmeans)
+library(ggplot2)
+library(agricolae)
+library(dplyr)
+library(multcompView)
+library(car)
+library(readr)
+library(ggpubr)
+library(tibble)
+library(flextable)
+library(readODS)
+library(stringr)
+library(rstatix)
+library(knitr)
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+f.data<- read_ods("/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/template for final data collection .main.ods"
+                  , sheet = 1)
+
+View(f.data)
+```
+
+```{r}
+f.data$IDs <- as.character(f.data$IDs)
+f.data$IDs <- gsub("(-|_)[[:digit:]][[:digit:]]","", f.data$IDs)
+head(f.data)
+```
+
+```{r}
+f.data$Replication <- NULL
+
+f.data[8:9]<- NULL 
+
+f.data[19]<- NULL 
+```
+
+```{r}
+head(f.data)
+```
+
+```{r}
+names(f.data)[1]<- "Unit"
+names(f.data)[8]<- "Biomass"
+names(f.data)[7]<- "max.Height"
+names(f.data)[9]<- "Shoots"
+names(f.data)[10]<- "Shoots_with_ear"
+names(f.data)[11]<- "Shoots_without_ear"
+names(f.data)[12]<- "Nr_ears"
+names(f.data)[13]<- "Full_ear"
+names(f.data)[14]<- "Half_ear"
+names(f.data)[15]<- "Weight_ear"
+names(f.data)[16]<- "Nr_seeds"
+names(f.data)[17]<- "Mature_seeds"
+names(f.data)[18]<- "Poor_seeds"
+names(f.data)[20]<- "TKW"
+str(f.data)
+head(f.data)
+```
+
+```{r}
+f.data[,7]
+```
+
+```{r}
+f.data[54,7] <- "84.7"
+f.data[53:60,]
+str(f.data)
+f.data$max.Height <- as.numeric(f.data$max.Height)
+```
+
+```{r}
+f.data$treatment <- as.factor(f.data$treatmen)
+f.data$Unit <- as.character(f.data$Unit)
+f.data$IDs <- as.factor(f.data$IDs)
+f.data$TKW<- round(f.data$TKW, digits=2)
+View(f.data)
+```
+
+```{r}
+#logic = str_detect(f.data$IDs, "2267")
+#f.data = f.data[!logic,]
+length(unique(f.data$IDs))
+```
+
+```{r}
+f.data[59, ]
+final.data <- f.data[-59, ]
+#View(final.data)
+dim(final.data)
+```
+
+```{r}
+check=unique(final.data$IDs)
+check
+str(final.data)
+
+final.data$IDs <- droplevels(final.data$IDs)
+str(final.data)
+levels(final.data$IDs)
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+Biomass <- ggplot(final.data, aes(x=IDs, y=Biomass, fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks =final.data$treatment,
+                    values = c("turquoise4","maroon4")) +
+        labs(y="Biomass [g]", x="lines")+
+#theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+    print(Biomass)
+
+
+
+ggsave("Biomass-boxplot.png", plot = Biomass, width = 15, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/Biomass")
+
+
+
+
+                         
+         
+```
+
+```{r}
+final.data$Unit<- as.character(final.data$Unit)
+options(repr.plot.width=30, repr.plot.height=10)
+Bs<-  ggplot(final.data, aes(x=Unit, y=Biomass,color=treatment))+
+  geom_point(size=5)+
+ scale_color_manual(breaks = c("ww", "ds"),
+                        values=c("blue", "red"))+
+theme(text=element_text(size = 20))+
+  ylab('Biomass [g]')+
+  xlab('Units')+
+  theme_minimal()
+print(Bs)
+
+ggsave("Biomass-scatter.pdf", plot = Bs, width = 30, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/Biomass")
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+B1<- ggplot(final.data, aes(x=IDs, y=TKW, color=treatment))+
+ 
+  geom_point(size=3)+
+ scale_color_manual(breaks = c("ww", "ds"),
+                        values=c("blue", "red"))+
+theme(text=element_text(size = 25))+
+  ylab('Biomass [g]')+
+  xlab('Units')+
+  theme_minimal()
+print(B1)
+
+ggsave("Biomass-line-scatter.pdf", plot = B1, width = 30, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/Biomass")
+```
+
+```{r}
+length(f.data$Biomass[f.data$treatment=="ww"])
+ length(f.data$Biomass[f.data$treatment=="ds"])
+```
+
+# Check for the normal distribution of each group
+
+## First making separate groups and assign to a variable
+
+```{r}
+control_fdata<- final.data$Biomass[final.data$treatment=="ww"]
+stress_fdata <- final.data$Biomass[final.data$treatment=="ds"]
+
+
+qqnorm(control_fdata- mean(control_fdata)/sd(control_fdata))
+qqline(control_fdata- mean(control_fdata)/sd(control_fdata))
+
+
+qqnorm(stress_fdata - mean(stress_fdata)/sd(stress_fdata))
+qqline(stress_fdata - mean(stress_fdata)/sd(stress_fdata))
+```
+
+```{r}
+boxplot(Biomass~IDs, data=final.data)
+```
+
+```{r}
+control_data<- final.data$TKW[final.data$treatment=="ww"]
+stress_data <- final.data$TKW[final.data$treatment=="ds"]
+
+var(control_data)
+var(stress_data)
+var(control_data)/var(stress_data)
+```
+
+# Check for the homogenity of the variances
+
+### - F-test: Compare the variances of two groups. The data must be normally distributed.
+### - Bartlett’s test: Compare the variances of two or more groups. The data must be normally distributed.
+### - Levene’s test: A robust alternative to the Bartlett’s test that is less sensitive to departures from normality.
+### - Fligner-Killeen’s test: a non-parametric test which is very robust against departures from normality.
+
+```{r}
+traits<- final.data[,-c(1,2,3,4,5,6,19)]
+head(traits)
+colNames<- colnames(traits)
+colNames
+length(colNames)
+1:length(colNames)
+```
+
+```{r}
+NV_table <- list()
+nor_c <- list()
+nor_s <- list()
+lev_test <-list()
+
+idx=1
+
+
+for(i in colNames){
+  
+        logic = final.data$treatment == "ww"
+        nor_c[[idx]] <-shapiro.test(final.data[logic,i])
+        nor_s[[idx]] <-shapiro.test(final.data[!logic,i])
+     
+        lev_test[[idx]] = leveneTest(as.formula(paste(i,"~treatment")), data=final.data)
+                  idx=idx+1
+ 
+
+}
+```
+
+```{r}
+
+for (i in seq(1, length(colNames), 1)){
+readline(paste("Normality of control group for", colNames[i]))
+    print(lev_test[[i]])
+
+}
+ 
+```
+
+```{r}
+head(final.data)
+str(final.data)
+final.data$Groups <- "High"
+
+
+
+final.data$Groups[grep("2156", final.data$IDs)] <- "Low"
+final.data$Groups[grep("2352", final.data$IDs)] <- "Low"
+final.data$Groups[grep("2321", final.data$IDs)] <- "Low"
+final.data$Groups[grep("2297", final.data$IDs)] <- "Low"
+final.data$Groups[grep("2095", final.data$IDs)] <- "Low"
+View(final.data)
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+#write.csv(final.data, "final.data.allgen.csv")
+final.data<- read.csv("final.data.allgen.csv",sep=",", header=TRUE)
+View(final.data)
+```
+
+```{r}
+final.data$IDs<- as.factor(final.data$IDs)
+final.data$treatment<- as.factor(final.data$treatment)
+final.data$Group<- as.factor(final.data$Group)
+final.data$Shoots<- as.numeric(final.data$Shoots)
+final.data$Nr_ears <- as.numeric(final.data$Nr_ears )
+final.data$Full_ear <- as.numeric(final.data$Full_ear )
+final.data$Half_ear<- as.numeric(final.data$Half_ear)
+final.data$Nr_seeds <- as.numeric(final.data$ Nr_seeds )
+final.data$Mature_seeds <- as.numeric(final.data$Mature_seeds )
+final.data$Poor_seeds  <- as.numeric(final.data$Poor_seeds  )
+str(final.data)
+```
+
+```{r}
+my_data<- final.data[, c(8,9,10,11,12,13,14,15,16,17,18,19,21)] 
+head(my_data)
+
+str(my_data)
+ res<- cor(my_data)
+res
+```
+
+```{r}
+library(corrplot)
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+
+```{r}
+View(final.data)
+```
+
+# Conversion of our for loop list into the data frame
+## First option: usind do.call (but changes the deciminals of P-Value). this mostly will be used for nested lists using cbind orrbind function
+## Second option: Using t apply which serves the format and deciminals
+
+```{r}
+#contro_table_normality<- do.call(rbind.data.frame, nor_c)
+
+CNormality_shapiro_table <- data.frame(t(sapply(nor_c,c)))
+CNormality_shapiro_table $Traits <- 1:nrow(CNormality_shapiro_table ) 
+
+
+CNormality_shapiro_table[1:13,5] <- c("max.Height","Biomass","Shoots","Shoots_with_ear","Shoots_without_ear",
+                                      "	Nr_ears	","Full_ear","Half_ear","Weight_ear","Nr_seeds","Mature_seeds","Poor_seeds","TKW")
+
+View(CNormality_shapiro_table)
+
+SNormality_shapiro_table <- data.frame(t(sapply(nor_s,c)))
+SNormality_shapiro_table $Traits <- 1:nrow(SNormality_shapiro_table )
+SNormality_shapiro_table[1:13,5] <- c("max.Height","Biomass","Shoots","Shoots_with_ear","Shoots_without_ear",
+                                      "	Nr_ears	","Full_ear","Half_ear","Weight_ear","Nr_seeds","Mature_seeds","Poor_seeds","TKW")
+
+View(SNormality_shapiro_table)
+
+
+leventes_result <- data.frame(t(sapply(lev_test,c)))
+leventes_result  $Traits <- 1:nrow(leventes_result)
+
+leventes_result[1:13,4] <- c("max.Height","Biomass","Shoots","Shoots_with_ear","Shoots_without_ear",
+                                      "	Nr_ears	","Full_ear","Half_ear","Weight_ear","Nr_seeds","Mature_seeds","Poor_seeds","TKW")
+View(leventes_result)
+```
+
+```{r}
+
+str(final.data)
+unique(final.data$IDs)
+final.data<- final.data[,-1]
+View(final.data)
+```
+
+# Biomass
+
+```{r}
+Biomass_AN <- aov(Biomass~ treatment*IDs, data=final.data)
+summary(Biomass_AN)
+```
+
+```{r}
+Biomass_ANt <- aov(lm(Biomass~ treatment*IDs, data=final.data))
+summary(Biomass_ANt)
+```
+
+```{r}
+b<-lm(Biomass~ treatment*IDs, data=final.data)
+bb<- summary.aov(b)
+bb
+c <-capture.output(bb,file="test.doc")
+dataFrame <- c %>% 
+  as_tibble()
+dataFrame
+View(dataFrame)
+```
+
+```{r}
+tukey <- TukeyHSD(Biomass_AN, conf.level=.95)
+print(tukey)
+```
+
+```{r}
+tukey.cld.Biomass <- multcompLetters4(Biomass_AN, tukey)
+print(tukey.cld.Biomass)
+```
+
+```{r}
+Biomass_summary <- group_by(final.data, treatment, IDs) %>%
+summarise(mean=mean(Biomass), sd=sd(Biomass))%>%
+arrange(desc(mean)) 
+          View(Biomass_summary)
+
+
+Biomass_summary_t <- group_by(final.data, treatment) %>%
+summarise(mean=mean(Biomass), sd=sd(Biomass))%>%
+arrange(desc(mean)) 
+          View(Biomass_summary_t)
+
+
+Biomass_summary_l <- group_by(final.data, IDs) %>%
+summarise(mean=mean(Biomass), sd=sd(Biomass))%>%
+arrange(desc(mean)) 
+          View(Biomass_summary_l)
+
+
+
+Biomass_summary_ITG <- group_by(final.data,Group,IDs, treatment) %>%
+summarise(mean=mean(Biomass), sd=sd(Biomass))%>%
+arrange(desc(mean)) 
+          View(Biomass_summary_ITG)
+write.table(Biomass_summary_ITG, "Biomass_summary_ITG.csv")
+```
+
+```{r}
+cld.Biomass <- as.data.frame.list(tukey.cld.Biomass$`treatment:IDs`)
+Biomass_summary$tukey <- cld.Biomass$Letters
+write.table(Biomass_summary, "Biomass.summary.August.csv")
+View(Biomass_summary)
+
+cld.Biomass.t <- as.data.frame.list(tukey.cld.Biomass$`treatment`)
+Biomass_summary_t$tukey.t <- cld.Biomass.t$Letters
+write.table(Biomass_summary_t, "Biomass.summary.t.August.csv")
+View(Biomass_summary_t)
+
+cld.Biomass.l <- as.data.frame.list(tukey.cld.Biomass$`IDs`)
+Biomass_summary_l$tukey.l <- cld.Biomass.l$Letters
+write.table(Biomass_summary_l, "Biomass.summary.l.August.csv")
+View(Biomass_summary_l)
+
+
+```
+
+```{r}
+Biomass_Int <- read.table("Biomass.summary.August.csv")
+Biomass_T<- read.table("Biomass.summary.t.August.csv")
+Biomass_L<- read.table("Biomass.summary.l.August.csv")
+Biomass_ITG<- read.table("Biomass_summary_ITG.csv")
+```
+
+```{r}
+Biomass_Int$treatment <- as.factor(Biomass_Int$treatment)
+Biomass_Int$IDs<- as.factor(Biomass_Int$IDs)
+str(Biomass_Int)
+```
+
+```{r}
+Biomass_ITG$treatment <- as.factor(Biomass_ITG$treatment)
+Biomass_ITG$IDs<- as.factor(Biomass_ITG$IDs)
+Biomass_ITG$Group<- as.factor(Biomass_ITG$Group)
+str(Biomass_ITG)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+
+BiomassIGT.<- ggplot(Biomass_Int, aes(x=IDs, y=mean, fill=treatment ))+
+geom_bar(stat="identity", position="dodge")+
+ 
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-7, hjust=0.5, size=5, colour="black")+
+labs(x="Lines", y="Biomass[g]")+
+ facet_wrap(~treatment)+
+theme_bw()+
+ 
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+
+
+theme(legend.position="top")+
+theme(text = element_text(size = 17))+
+ #
+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+
+BiomassIGT.
+#BiomassIGT.+ scale_colour_discrete(labels = c("drought", "control"))
+
+
+```
+
+```{r}
+ggplot(econdatalong, aes(x=Country, y=value))+
+  geom_bar(stat='identity', fill="forest green")+
+  facet_wrap(~measure)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+
+Biomass.<- ggplot(Biomass_Int, aes(x=IDs, y=mean, fill=treatment, ))+
+geom_bar(stat="identity", position="dodge")+
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-7, hjust=0.5, size=5, colour="black")+
+labs(x="Lines", y="Biomass[g]")+
+ facet_wrap(~measure)
+theme_bw()+
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+theme(legend.position="top")+
+theme(text = element_text(size = 17))+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+
+Biomass.
+
+
+ggsave("Biomass-Int.png", plot = Biomass., width = 20, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/Biomass")
+```
+
+```{r}
+Biomass1<- ggplot(Biomass_Int, aes(x=treatment, y=mean, fill=IDs, color=IDs))+
+geom_bar(stat="identity", position="dodge")+
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-7.5, hjust=0.5, size=5, colour="black")+
+labs(x="Lines", y="Biomass[g]")+
+#ggtitle("Plot of length \n by dose")+
+theme_bw()+
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(legend.position="top")+
+theme(text = element_text(size = 19))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+
+Biomass1
+
+
+ggsave("Biomass-Int-sept.png", plot = Biomass1, width = 20, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/Biomass")
+```
+
+```{r}
+boxplot(Biomass~treatment, data=final.data)
+```
+
+```{r}
+View(Biomass_summary)
+```
+
+```{r}
+Control_data_Biomass <- Biomass_summary[1:10, ]
+Control_data_Biomass 
+Control_data_Biomass[order(Control_data_Biomass$IDs),]
+
+
+```
+
+```{r}
+Stress_data_Biomass <- Biomass_summary[11:20, ]
+Stress_data_Biomass 
+Stress_data_Biomass[order(Stress_data_Biomass$IDs),]
+```
+
+```{r}
+difference_table_Biomass <- left_join(Stress_data_Biomass, Control_data_Biomass, by="IDs")
+#View(difference_table_Biomass)
+
+difference_table_Biomass$Biomass_difference <- (difference_table_Biomass$mean.y)-(difference_table_Biomass$mean.x)
+View(difference_table_Biomass)
+```
+
+```{r}
+
+options(repr.plot.width=20, repr.plot.height=7)
+
+p <- ggplot(difference_table_Biomass, aes(x=IDs, y=Biomass_difference, fill=IDs) ) + 
+  geom_bar(stat = "identity")+
+scale_fill_manual(values=c("blue","red","yellow","green","orange","brown","gray","pink","lightblue", "magenta")) +
+theme(legend.position="top")+
+theme(text = element_text(size = 16))+
+#ggtitle("Biomass difference for all lines")+
+theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+theme(text = element_text(size = 20))+
+geom_text(aes(label=round(Biomass_difference,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)+
+labs(x="Lines", y="Biomass-difference[g]")
+p
+
+
+ggsave("Biomass-difference.png", plot = p, width = 20, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/Biomass")
+```
+
+```{r}
+str(final.data)
+
+Biomass_interactions<- interaction.plot(x.factor = final.data$IDs, trace.factor = final.data$treatment, 
+                 response =  final.data$Biomass, fun = mean, 
+                 type = "l", legend = TRUE, main="Biomass differentiation for all lines",
+                 xlab = "Lines", ylab="Biomass[g]", trace.label = "Treatments",
+                 pch=c(1,19), col = c("red2","darkgreen"), lwd=3)
+                # theme(axis.text.x = element_text(colour=c("black","red","red","black","red","red","red","black","black")))+
+options(repr.plot.width=13, repr.plot.height=7)
+print(Biomass_interactions)
+
+
+
+ggsave("Biomass-Int-Graph.jpeg", plot = Biomass_interactions, width = 20, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/Biomass")
+```
+
+```{r}
+boxplot(Biomass~Group*treatment, final.data)
+boxplot(Biomass~Group, final.data)
+```
+
+```{r}
+#t.test(Biomass~Groups, data=final.data)
+#t.test(Biomass~treatment, data=final.data)
+anova<- aov(Biomass~treatment*Group, data=final.data)
+summary(anova)
+plot(anova, 2)
+tukey<- TukeyHSD(anova, cof.level=.95)
+tukey.cld<- multcompLetters4(anova,tukey)
+tukey.cld
+##kruskal.test(Biomass ~ treatment, data = final.data)
+kruskal.test(Biomass ~ Groups, data = final.data)
+#pairwise.t.test(final.data$Biomass, final.data$Groups, p.adjust.method = "BH", pool.sd=FALSE, var.equal=FALSE, data=final.data)
+leveneTest(Biomass~Group, data=final.data)
+with(final.data, shapiro.test(Biomass[Group=="High"]))
+```
+
+ # Wilcox.test:  Best choice since they have equal variance(for groups) and not normally distributed)
+
+```{r}
+wilcox.test(Biomass~Group, alternative = "two.sided", data=final.data) #(best choice since they have equal variance and not normally distributed)
+```
+
+```{r}
+library(agricolae)
+print(LSD.test(anova,c("Group","treatment")))
+
+print(LSD.test(anova,"Group"))
+```
+
+```{r}
+pwc4 <- final.data %>% 
+pairwise_t_test(Biomass~Group, pool.sd = TRUE, p.adjust.method = "bonferroni")
+pwc4
+
+
+
+pwc5 <- final.data %>% 
+pairwise_t_test(Biomass~Group, pool.sd = FALSE, p.adjust.method = "bonferroni")
+pwc5
+```
+
+```{r}
+LM <- mean(final.data$Biomass[final.data$Group=="Low"],)
+LM
+
+HM <- mean(final.data$Biomass[final.data$Group=="High"],)
+HM
+sd(final.data$Biomass[final.data$Group=="High"],)
+sd(final.data$Biomass[final.data$Group=="Low"],)
+```
+
+```{r}
+final.data$Group<- as.factor(final.data$Group)
+str(final.data)
+boxplot(Biomass~Groups, final.data)
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+p <- ggplot(final.data, aes(x=treatment, y=Biomass,  fill=Group))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$Group,
+                    values = c("red", "orange")) +
+        labs(y="Biomass [g]", x="lines")
+
+
+
+    print(p)
+                         
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+p <- ggplot(final.data, aes(x=Group,y=Biomass,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="Biomass [g]", x="CID groups")+
+theme(text = element_text(size = 20))+
+theme(axis.text.x = element_text(colour=c("black","black")))
+
+
+
+    print(p)
+```
+
+# Max.Height
+
+```{r}
+options(repr.plot.width=17, repr.plot.height=10)
+Mheight. <- ggplot(final.data, aes(x=IDs, y=max.Height, fill=treatment))+
+       geom_boxplot()+
+     scale_fill_manual(breaks =final.data$treatment,
+                    values = c("turquoise4","maroon4")) +
+        labs(y="Max.Height[cm]", x="lines")+
+  theme(text=element_text(size = 60))+
+theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+    print(Mheight.)
+
+
+fH<-Mheight.+theme(axis.text.x =element_text(size = 15))
+fH
+ffh<-fH+ theme(text = element_text(size = 15))  
+ffh
+ggsave("MHeight-boxplot.png", plot = ffh, width = 15, height = 10,
+      path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/max.Height")
+```
+
+```{r}
+max.Height_AN <- aov(max.Height~ treatment*IDs, data=final.data)
+summary(max.Height_AN)
+```
+
+```{r}
+tukey<- TukeyHSD(max.Height_AN, conf.level=.95)
+tukey
+```
+
+```{r}
+tukey.cld.Height<-multcompLetters4(max.Height_AN, tukey)
+View(tukey.cld.Height)
+```
+
+```{r}
+MHeight_summary <- group_by(final.data, treatment, IDs) %>%
+summarise(mean=mean(max.Height), sd=sd(max.Height))%>%
+arrange(desc(mean)) 
+          View(MHeight_summary)
+
+
+MHeight_summary_t <- group_by(final.data, treatment) %>%
+summarise(mean=mean(max.Height), sd=sd(max.Height))%>%
+arrange(desc(mean)) 
+          View(MHeight_summary_t)
+
+
+MHeight_summary_l <- group_by(final.data, IDs) %>%
+summarise(mean=mean(max.Height), sd=sd(max.Height))%>%
+arrange(desc(mean)) 
+          View(MHeight_summary_l)
+
+
+MHeight_summary_G <- group_by(final.data, Group) %>%
+summarise(mean=mean(max.Height), sd=sd(max.Height)) %>%
+          arrange(desc(mean))
+         View(MHeight_summary_G)
+
+
+MHeight_summary_Gt <- group_by(final.data, Group, treatment) %>%
+summarise(mean=mean(max.Height), sd=sd(max.Height)) %>%
+          arrange(desc(mean))
+         View(MHeight_summary_Gt)
+```
+
+```{r}
+cld.MHeight <- as.data.frame.list(tukey.cld.Height$`treatment:IDs`)
+MHeight_summary$tukey <-cld.MHeight $Letters
+write.table(MHeight_summary, "MHeight.summary.August.csv")
+View(MHeight_summary)
+
+
+cld.MHeight_t <- as.data.frame.list(tukey.cld.Height$`treatment`)
+MHeight_summary_t$tukey <-cld.MHeight_t $Letters
+write.table(MHeight_summary_t, "MHeight.t.summary.August.csv")
+View(MHeight_summary_t)
+
+
+
+
+cld.MHeight_l <- as.data.frame.list(tukey.cld.Height$`IDs`)
+MHeight_summary_l$tukey <-cld.MHeight_l $Letters
+write.table(MHeight_summary_l, "MHeight.l.summary.August.csv")
+View(MHeight_summary_l)
+
+
+```
+
+```{r}
+MHeight_Int <- read.table("MHeight.summary.August.csv")
+MHeight_T<- read.table("MHeight.t.summary.August.csv")
+MHeight_L<- read.table("MHeight.l.summary.August.csv")
+```
+
+```{r}
+
+options(repr.plot.width=20, repr.plot.height=10)
+       MHeight_Int$IDs<- as.factor(MHeight_Int$IDs)
+
+Height<- ggplot(MHeight_Int, aes(x=IDs, y=mean, fill=treatment))+
+geom_bar(stat="identity", position="dodge")+
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-4.55, hjust=0.4, size=5, colour="black")+
+
+labs(x="Lines", y="Max.Heigh [cm]")+
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+
+theme_bw()+
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(axis.text.x=element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+theme(legend.position="top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+
+Height
+
+ggsave("max.height.Int.png", plot =Height, width = 20, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/max.Height")
+
+```
+
+```{r}
+
+options(repr.plot.width=20, repr.plot.height=10)
+       MHeight_Int$IDs<- as.factor(MHeight_Int$IDs)
+
+Height<- ggplot(MHeight_Int, aes(x=IDs, y=mean, fill=treatment))+
+geom_bar(stat="identity", position="dodge")+
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-4.55, hjust=0.4, size=5, colour="black")+
+facet_wrap(~treatment)+
+labs(x="Lines", y="Max.Heigh [cm]")+
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+
+theme_bw()+
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(axis.text.x=element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+theme(legend.position="top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+
+Height
+```
+
+```{r}
+
+options(repr.plot.width=20, repr.plot.height=10)
+       MHeight_Int$IDs<- as.factor(MHeight_Int$IDs)
+
+Height1<- ggplot(MHeight_Int, aes(x=treatment, y=mean, fill=IDs, color=IDs))+
+geom_bar(stat="identity", position="dodge")+
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-4.55, hjust=0.4, size=5, colour="black")+
+labs(x="Lines", y="Max.Height [cm]")+
+theme_bw()+
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(legend.position="top")+
+theme(text = element_text(size = 20))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+
+Height1
+
+
+ggsave("max.height.Int.sep.png", plot =Height1, width = 20, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/max.Height")
+```
+
+```{r}
+View(MHeight_summary)
+```
+
+```{r}
+Control_data_Height <-MHeight_summary[c(1,2,3,4,5,6,9,10,11,17), ]
+Control_data_Height <-Control_data_Height [order(Control_data_Height$IDs),]
+Control_data_Height
+```
+
+```{r}
+Stress_data_Height <-MHeight_summary[c(7,8,12,13,14,15,16,18,19,20), ]
+Stress_data_Height <-Stress_data_Height [order(Stress_data_Height$IDs),]
+Stress_data_Height
+```
+
+```{r}
+difference_data_Height <- left_join(Control_data_Height,Stress_data_Height, by="IDs")
+difference_data_Height 
+
+difference_data_Height$Height_difference <- (difference_data_Height$mean.x)-(difference_data_Height$mean.y)
+View(difference_data_Height)
+```
+
+```{r}
+
+options(repr.plot.width=15, repr.plot.height=7)
+
+H <- ggplot(difference_data_Height, aes(x=IDs, y=Height_difference, fill=IDs) ) + 
+  geom_bar(stat = "identity")+
+scale_fill_manual(values=c("blue","red","yellow","green","orange","brown","gray","pink","lightblue","magenta")) +
+theme(legend.position="top")+
+#theme(text = element_text(size = 16))+
+theme_bw()+
+
+labs(x="Lines", y="max.Height-difference[cm]")+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+theme(text = element_text(size = 20))+
+geom_text(aes(label=round(Height_difference,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+H
+
+ggsave("max.Height.difference.png", plot = H, width = 15, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/max.Height")
+```
+
+```{r}
+
+options(repr.plot.width=15, repr.plot.height=7)
+
+H <- ggplot(MHeight_summary_G, aes(x=Group, y=mean, fill=Group) ) + 
+  geom_bar(stat = "identity", position = "dodge", alpha=0.5) +
+ # geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.2, show.legend = FALSE) +
+ylim(0,110)+
+ labs(x="CID Groups", y="Max.Height [cm]") +
+   theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  #theme(legend.position = c(0.08, 0.90))+
+theme(legend.position = "top") +
+scale_fill_manual(values=c("blue","red"))+
+
+theme(text = element_text(size = 20))+
+
+
+geom_segment(x=1, y=100, xend=2, yend=100)+
+
+geom_text(x=1.5, y=105, label="2.42e-12 ***", size=9)
+H
+```
+
+```{r}
+library(ggplot2)
+library(ggsignif)
+
+
+ggplot(final.data, aes(x=Group, y=max.Height)) + 
+  geom_boxplot() +
+scale_fill_manual(values=c("blue","red"))+
+  geom_signif(comparisons = list(c("High", "Low")), 
+              map_signif_level=TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(ggsignif)
+
+
+ggplot(final.data, aes(x=Group, y=max.Height, fill=treatment)) + 
+  geom_boxplot() +
+  geom_signif(comparisons = list(c("High", "Low")), 
+              map_signif_level=TRUE)
+
+```
+
+```{r}
+boxplot(max.Height~Group, data=final.data)
+boxplot(max.Height~Group*treatment, data=final.data)
+```
+
+```{r}
+s<- aov(max.Height~Group*treatment, data=final.data)
+summary(s)
+tukey<- TukeyHSD(s, conf.level=.95)
+tukey
+tukey.cld.Height.Gt<- multcompLetters4(s,tukey)
+View(tukey.cld.Height.Gt)
+```
+
+```{r}
+MHeight_summary_Gt <- group_by(final.data, Group, treatment) %>%
+summarise(mean=mean(max.Height), sd=sd(max.Height)) %>%
+          arrange(desc(mean))
+         View(MHeight_summary_Gt)
+```
+
+```{r}
+
+cld.MHeight_Gt <- as.data.frame.list(tukey.cld.Height.Gt$`Group:treatment`)
+MHeight_summary_Gt$tukey <-cld.MHeight_Gt $Letters
+write.table(MHeight_summary_Gt, "MHeight.Gt.summary.August.csv")
+View(MHeight_summary_Gt)
+```
+
+```{r}
+Height.Gt<- read.table("MHeight.Gt.summary.August.csv")
+View(Height.Gt)
+```
+
+```{r}
+options(repr.plot.width=10, repr.plot.height=10)
+       Height.Gt$Group<- as.factor(Height.Gt$Group)
+
+Height_Gt<- ggplot(Height.Gt, aes(x=Group, y=mean, fill=treatment))+
+geom_bar(stat="identity", position="dodge")+
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-4, hjust=-4, size=5, colour="black")+
+labs(x="Groups", y="Max.Heigh [cm]")+
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+theme_bw()+
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(legend.position="top")+
+theme(text = element_text(size = 18))+
+scale_fill_manual(values=c("turquoise4","pink3"))+
+theme(axis.text.x = element_text(colour=c("black","black")))+
+geom_text(aes(label=round(mean,2), y = 10), position = position_dodge(0.90), colour="black", size= 5)
+
+
+Height_Gt
+
+ggsave("max.height.Int.G.png", plot = Height_Gt, width = 15, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/max.Height")
+```
+
+```{r}
+options(repr.plot.width=10, repr.plot.height=10)
+       Height.Gt$Group<- as.factor(Height.Gt$Group)
+
+Height_Gt1<- ggplot(Height.Gt, aes(x=treatment, y=mean, fill=Group))+
+geom_bar(stat="identity", position="dodge")+
+geom_errorbar(aes(ymin=mean-sd , ymax=mean+sd) ,position = position_dodge(0.9), width = 0.25)+
+geom_text(aes(label=tukey), position=position_dodge(0.90), vjust=-2.5, hjust=-3, size=5, colour="black")+
+labs(x="treatments", y="Max.Heigh [cm]")+
+scale_fill_manual(values=c("turquoise4","pink3"))+
+
+theme_bw()+
+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(legend.position="top")+
+theme(text = element_text(size = 18))+
+geom_text(aes(label=round(mean,2), y = 10), position = position_dodge(0.90), colour="black", size= 5)
+
+Height_Gt1
+
+ggsave("max.Height.Int.Trts.png", plot = Height_Gt1, width = 15, height = 10,
+       path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/max.Height")
+```
+
+# Number of the  Shoots
+
+```{r}
+View(final.data)
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+
+ps <- ggplot(final.data, aes(x=IDs, y=Shoots,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+        scale_fill_manual(breaks =final.data$treatment,
+                    values = c("turquoise4","maroon4")) +
+        labs(y="Nr of the shoots", x="lines")+
+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+    print(ps)
+
+#fpf<- ps+theme_bw()
+#fpf
+#ggsave("Nr.shoots-boxplot.png", plot = ps, width = 15, height = 10,
+      #path="/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/Visualization/all shoots")
+```
+
+```{r}
+Shoots_AN <- aov(Shoots~ treatment*IDs, data=final.data)
+summary(Shoots_AN )
+
+Shoots_AN_G <- aov(Shoots~ treatment*Group, data=final.data)
+summary(Shoots_AN_G)
+```
+
+```{r}
+tukey<- TukeyHSD(Shoots_AN, conf.level=.95)
+tukey.cld.shoots<- multcompLetters4(Shoots_AN, tukey)
+tukey.cld.shoots
+
+
+LSD_Test<- print(LSD.test(Shoots_AN_G, c("treatment","Group")))
+```
+
+```{r}
+summary_shoots<- group_by(final.data, treatment, IDs) %>%
+summarise(mean=mean(Shoots), sd=sd(Shoots)) %>%
+arrange(desc(mean))
+View(summary_shoots)
+
+summary_shoots_t<- group_by(final.data, treatment) %>%
+summarise(mean=mean(Shoots), sd=sd(Shoots)) %>%
+arrange(desc(mean))
+View(summary_shoots_t)
+
+summary_shoots_l<- group_by(final.data, IDs) %>%
+summarise(mean=mean(Shoots), sd=sd(Shoots)) %>%
+arrange(desc(mean))
+View(summary_shoots_l)
+
+
+summary_shoots_G<- group_by(final.data, Group) %>%
+summarise(mean=mean(Shoots), sd=sd(Shoots)) %>%
+arrange(desc(mean))
+View(summary_shoots_G)
+
+summary_shoots_Gt<- group_by(final.data, treatment, Group) %>%
+summarise(mean=mean(Shoots), sd=sd(Shoots)) %>%
+arrange(desc(mean))
+View(summary_shoots_Gt)
+```
+
+```{r}
+cld_shoots_t <- as.data.frame.list(tukey.cld.shoots$`treatment`)
+summary_shoots_t$tukey <-cld_shoots_t $Letters
+write.table(summary_shoots_t, "summary_shoots_t.August.csv")
+View(summary_shoots_t)
+
+cld_shoots_l <- as.data.frame.list(tukey.cld.shoots$`IDs`)
+summary_shoots_l$tukey <-cld_shoots_l $Letters
+write.table(summary_shoots_l, "summary_shoots_l.August.csv")
+View(summary_shoots_l)
+```
+
+```{r}
+shoots_t<- read.table("summary_shoots_t.August.csv")
+shoots_l<- read.table("summary_shoots_l.August.csv")
+str(shoots_l)
+```
+
+```{r}
+shoots_l$IDs<- as.factor(shoots_l$IDs)
+options(repr.plot.width=15,  repr.plot.height=10)
+shootsl<- ggplot(data=shoots_l, aes(x =IDs, y = mean, fill=IDs)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.8, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Number of the shoots") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position ="top")+
+theme(text = element_text(size = 20))  +
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5.5)
+print(shootsl)
+options(repr.plot.width=24, repr.plot.height=10)
+```
+
+```{r}
+shoots_t$treatment<- as.factor(shoots_t$treatment)
+options(repr.plot.width=10,  repr.plot.height=7)
+shoots<- ggplot(data=shoots_t, aes(x =treatment, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge", alpha=0.5 ) +
+  #geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 5, colour = "black") +
+    #geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Treatments", y="Number of the shoots") +
+   theme_bw() +
+ylim(0,10)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  #theme(legend.position = c(0.08, 0.90))+
+theme(legend.position = "top") +
+scale_fill_manual(values=c("red","darkgreen"))+
+theme(text = element_text(size = 20))  +
+
+geom_segment(x=1, y=9.5, xend=2, yend=9.5)+
+theme(axis.text.x = element_text(colour=c("black","black")))+
+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)+
+
+geom_text(x=1.5, y=10, label="< 2e-16 ***", size=5)
+
+print(shoots)
+
+
+
+
+```
+
+# Number of the ears
+
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+p <- ggplot(final.data, aes(x=IDs, y=Nr_ears,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="Nr of the ears", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+
+
+    print(p)
+```
+
+```{r}
+boxplot(Nr_ears~Group, data=final.data)
+```
+
+```{r}
+ears_AN<- aov(Nr_ears~treatment*IDs, data=final.data)
+summary(ears_AN)
+
+ears_AN_G<- aov(Nr_ears~treatment*Group, data=final.data)
+summary(ears_AN_G)
+
+#mood.medtest(Nr_ears~treatment , data = final.data, exact = NULL)
+```
+
+```{r}
+tukey.e<- TukeyHSD(ears_AN, conf.levels=.95)
+tukey.cld.ear<- multcompLetters4(ears_AN, tukey.e)
+tukey.cld.ear
+```
+
+```{r}
+tukey.e<- TukeyHSD(ears_AN_G, conf.levels=.95)
+tukey.cld.G<- multcompLetters4(ears_AN_G, tukey.e)
+tukey.cld.G
+
+#LSD_Test<- print(LSD.test(ears_AN_G, c("treatment","Group")))
+```
+
+```{r}
+summary_ears<- group_by(final.data, treatment, IDs) %>%
+summarise(mean=mean(Nr_ears), sd=sd(Nr_ears)) %>%
+arrange(desc(mean))
+View(summary_ears)
+
+cld.ears<- as.data.frame.list(tukey.cld.ear$`treatment:IDs`)
+summary_ears$tukey<- cld.ears$ Letters
+write.table(summary_ears, "summary_ears_Agugust.csv")
+View(summary_ears)
+
+
+
+summary_ears_Gt<- group_by(final.data, treatment, Group) %>%
+summarise(mean=mean(Nr_ears), sd=sd(Nr_ears)) %>%
+arrange(desc(mean))
+View(summary_ears_Gt)
+
+cld.ears.Gt<- as.data.frame.list(tukey.cld.G$`treatment:Group`)
+summary_ears_Gt$tukey<- cld.ears.Gt$ Letters
+write.table(summary_ears_Gt, "summary_ears_Gt_Agugust.csv")
+View(summary_ears_Gt)
+```
+
+```{r}
+summary_ears_t<- group_by(final.data, treatment) %>%
+summarise(mean=mean(Nr_ears), sd=sd(Nr_ears)) %>%
+arrange(desc(mean))
+View(summary_ears_t)
+
+cld.ears.t<- as.data.frame.list(tukey.cld.ear$`treatment`)
+summary_ears_t$tukey<- cld.ears.t$ Letters
+write.table(summary_ears_t, "summary_ears_t_Agugust.csv")
+View(summary_ears_t)
+
+summary_ears_Id<- group_by(final.data,IDs) %>%
+summarise(mean=mean(Nr_ears), sd=sd(Nr_ears)) %>%
+arrange(desc(mean))
+View(summary_ears_t)
+
+cld.ears.Id<- as.data.frame.list(tukey.cld.ear$`IDs`)
+summary_ears_Id$tukey<- cld.ears.Id$ Letters
+write.table(summary_ears_Id, "summary_ears_Id_Agugust.csv")
+View(summary_ears_Id)
+```
+
+```{r}
+summary_nr_ears_t<- read.table("summary_ears_t_Agugust.csv")
+summary_nr_ears_Id<- read.table("summary_ears_Id_Agugust.csv")
+summary_nr_ears_t$treatment<- as.factor(summary_nr_ears_t$treatment)
+summary_nr_ears_Id$IDs<- as.factor(summary_nr_ears_Id$IDs)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+ears<- ggplot(data=summary_nr_ears_Id, aes(x =IDs, y = mean, fill=IDs)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.8, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Number of the ears") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5.5)
+print(ears)
+
+```
+
+```{r}
+options(repr.plot.width=10,  repr.plot.height=7)
+ears1<- ggplot(data=summary_nr_ears_t, aes(x =treatment, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  #geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.8, hjust=-0.5, size = 4, colour = "black") +
+   # geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Treatments", y="Number of the ears") +
+   theme_bw() +
+ylim(0,10)+
+#theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 20))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)+
+
+geom_segment(x=1, y=9.5, xend=2, yend=9.5,color="black")+
+
+
+theme(axis.text.x = element_text(colour=c("black","black")))+
+scale_fill_manual(values=c("magenta","blue"))+
+geom_text(x=1.5, y=10, label="< 2e-16 ***", size=5,color="black")
+
+print(ears1)
+
+
+```
+
+```{r}
+summary_nr_ears<- read.table("summary_ears_Agugust.csv")
+summary_nr_ears$IDs<- as.factor(summary_nr_ears$IDs)
+summary_nr_ears$treatment<- as.factor(summary_nr_ears$treatment)
+```
+
+```{r}
+summary_nr_ears_Gt<- read.table("summary_ears_Gt_Agugust.csv")
+summary_nr_ears_Gt$Group<- as.factor(summary_nr_ears_Gt$Group)
+summary_nr_ears_Gt$treatment<- as.factor(summary_nr_ears_Gt$treatment)
+str(summary_nr_ears_Gt)
+```
+
+```{r}
+str(summary_nr_ears)
+```
+
+```{r}
+
+options(repr.plot.width=15,  repr.plot.height=10)
+ears<- ggplot(data=summary_nr_ears, aes(x =IDs, y = mean, fill=treatment, colour=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.8, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Number of the ears") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+print(ears)
+
+
+
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+ears<- ggplot(data=summary_nr_ears, aes(x =treatment, y = mean, fill=IDs, colour=IDs)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.8, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Number of the ears") +
+   theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+print(ears)
+```
+
+```{r}
+
+options(repr.plot.width=17, repr.plot.height=7)
+earsw_differentiation<- interaction.plot(x.factor = final.data$treatment, trace.factor = final.data$IDs, 
+                 response =  final.data$Nr_ears, fun = mean, 
+                 type = "b", legend = TRUE, main="Nr_ears differentiation across the treatments ",
+                 xlab = "Treatments", ylab="EN", trace.label = "Lines",
+                 pch=c(1,19), col = c("blue", "red", "black","magenta", "orange","green",
+                                      "dark green", "purple", "pink"),lwd=2) 
+print(earsw_differentiation)
+
+```
+
+```{r}
+interactions<- interaction.plot(x.factor = final.data$treatment ,trace.factor = final.data$Group, 
+                 response = final.data$Nr_ears, fun = mean, 
+                 type = "l", legend = TRUE, main="ears weight differentiation across all lines",
+                 xlab = "Lines", ylab="EN", trace.label = "Treatments",
+                 pch=c(1,19), col = c("darkgreen", "red"), lwd=2)
+                 
+options(repr.plot.width=13, repr.plot.height=7)
+print(interactions)
+```
+
+```{r}
+#options(repr.plot.width=15,  repr.plot.height=10)
+ears<- ggplot(data=summary_nr_ears_Gt, aes(x =treatment, y = mean, fill=Group, colour=Group)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.8, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Number of the ears") +
+   theme_bw() +
+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 5)
+print(ears)
+```
+
+```{r}
+boxplot(Nr_ears~Group, data=final.data)
+```
+
+# weight of the ears
+
+```{r}
+str(final.data)
+```
+
+```{r}
+weight_ear_AN<- aov(Weight_ear~treatment*IDs, data=final.data)
+summary(weight_ear_AN)
+
+
+weight_ear_AN_G<- aov(Weight_ear~treatment*Group, data=final.data)
+summary(weight_ear_AN_G)
+#mood.medtest(Weight_ear~Group, data=final.data, exact=TRUE)
+#mood.medtest(Weight_ear~Group,
+            # data  = final.data,
+             #exact = FALSE)
+```
+
+```{r}
+tukey.we<- TukeyHSD(weight_ear_AN, conf.levels=.95)
+tukey.cld.ear<- multcompLetters4(weight_ear_AN, tukey.we)
+tukey.cld.ear
+
+
+
+tukey.we.G <- TukeyHSD(weight_ear_AN_G, conf.levels=.95)
+tukey.cld.ear.G <- multcompLetters4(weight_ear_AN_G, tukey.we.G)
+tukey.cld.ear.G
+
+
+
+LSD_Test<- print(LSD.test(weight_ear_AN_G, c("treatment","Group")))
+```
+
+```{r}
+summary_ear_weight<- group_by(final.data, treatment, IDs) %>%
+summarise(mean=mean(Weight_ear), sd=sd(Weight_ear)) %>%
+arrange(desc(mean))
+View(summary_ear_weight)
+
+cld_ear<- as.data.frame.list(tukey.cld.ear$`treatment:IDs`)
+summary_ear_weight$tukey<- cld_ear$Letters
+View(summary_ear_weight)
+write.table(summary_ear_weight, "summayr_ear.weight_August.csv")
+```
+
+```{r}
+ear_weight<- read.table( "summayr_ear.weight_August.csv")
+ear_weight$IDs <- as.factor(ear_weight$IDs )
+ear_weight$treatment <- as.factor(ear_weight$treatment)
+str(ear_weight)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+ears<- ggplot(data=ear_weight, aes(x =IDs, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="ears_weight [g]") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = .5), position = position_dodge(0.90), colour="black", size= 5)
+print(ears)
+
+```
+
+```{r}
+interactions<- interaction.plot(x.factor = final.data$IDs, trace.factor = final.data$treatment, 
+                 response = final.data$Weight_ear, fun = mean, 
+                 type = "l", legend = TRUE, main="ears weight differentiation across all lines",
+                 xlab = "Lines", ylab="EW[g]", trace.label = "Treatments",
+                 pch=c(1,19), col = c("red", "darkgreen"), lwd=2)
+                 
+options(repr.plot.width=13, repr.plot.height=7)
+print(interactions)
+```
+
+```{r}
+interactions<- interaction.plot(x.factor = final.data$treatment, trace.factor = final.data$Group, 
+                 response = final.data$Weight_ear, fun = mean, 
+                 type = "l", legend = TRUE, main="ears weight differentiation across all lines",
+                 xlab = "Treatments", ylab="EW[g]", trace.label = "Treatments",
+                 pch=c(1,19), col = c("darkgreen", "red"), lwd=2, cex.axis=1.5, cex.lab = 1.25)
+                 
+options(repr.plot.width=13, repr.plot.height=7)
+print(interactions)
+```
+
+```{r}
+library(ggplot2)
+fit <- lm(Weight_ear ~ treatment * Group, data = final.data)
+interact_plot(fit, pred = treatment, modx = Group, interval = TRUE,
+  int.type = "confidence", int.width = .8)
+```
+
+```{r}
+options(repr.plot.width=17, repr.plot.height=7)
+earsw_differentiation<- interaction.plot(x.factor = final.data$treatment, trace.factor = final.data$IDs, 
+                 response =  final.data$Weight_ear, fun = mean, 
+                 type = "b", legend = TRUE, main="ears weight differentiation across the treatments ",
+                 xlab = "Treatments", ylab="EW[g]", trace.label = "Lines",
+                 pch=c(1,19), col = c("blue", "red", "black","magenta", "orange","green",
+                                      "dark green", "purple", "pink"),lwd=2) 
+print(earsw_differentiation)
+```
+
+```{r}
+summary_ear_weight_Gt<- group_by(final.data, treatment, Group) %>%
+summarise(mean=mean(Weight_ear), sd=sd(Weight_ear)) %>%
+arrange(desc(mean))
+
+
+cld_ear_Gt<- as.data.frame.list(tukey.cld.ear.G$`treatment:Group`)
+summary_ear_weight_Gt$tukey <- cld_ear_Gt$Letters
+View(summary_ear_weight_Gt)
+write.table(summary_ear_weight_Gt, "summayr_ear.weight_Gt_August.csv")
+
+
+
+summary_ear_weight_G<- group_by(final.data, Group) %>%
+summarise(mean=mean(Weight_ear), sd=sd(Weight_ear)) %>%
+arrange(desc(mean))
+
+
+cld_ear_G<- as.data.frame.list(tukey.cld.ear.G$`Group`)
+summary_ear_weight_G$tukey <- cld_ear_G$Letters
+View(summary_ear_weight_G)
+write.table(summary_ear_weight_G, "summayr_ear.weight_G_August.csv")
+
+```
+
+```{r}
+summary_EW_Gt<- read.table("summayr_ear.weight_Gt_August.csv")
+
+summary_EW_Gt$Group <- as.factor(summary_EW_Gt$Group)
+summary_EW_Gt$treatment <- as.factor(summary_EW_Gt$treatment)
+str(summary_EW_Gt)
+```
+
+```{r}
+
+ears<- ggplot(data=summary_EW_Gt, aes(x =Group, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Groups", y="ears_weight [g]") +
+   theme_bw() +
+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+scale_fill_manual(values=c("#d8b365","#5ab4ac","#d8b365","#5ab4ac"))+
+geom_text(aes(label=round(mean,2), y = .5), position = position_dodge(0.90), colour="black", size= 5)
+print(ears)
+```
+
+```{r}
+boxplot(Weight_ear~Group, data=final.data)
+boxplot(Weight_ear~Group*treatment, data=final.data)
+```
+
+```{r}
+GEW<- ggplot(data=summary_ear_weight_G, aes(x =Group, y = mean, fill=Group)) + 
+  geom_bar(stat = "identity", position = "dodge", alpha=0.5 ) +
+ # geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 5, colour = "black") +
+   # geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="treatment", y="ears_weight [g]") +
+   theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  #theme(legend.position = c(0.08, 0.90))+
+theme(legend.position = "top") +
+#scale_fill_manual(values=c("red","darkgreen"))+
+theme(text = element_text(size = 20))  
+print(GEW)
+#options(repr.plot.width=5, repr.plot.height=7)
+```
+
+# Number of the all seeds
+
+```{r}
+str(final.data)
+```
+
+```{r}
+boxplot(Nr_seeds~Group*treatment, data=final.data)
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+tkw <- ggplot(final.data, aes(x=IDs, y=Nr_seeds,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="TKW [g]", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+
+
+    print(tkw)
+```
+
+```{r}
+Nr_seeds_AN<- aov(Nr_seeds~treatment+IDs+treatment*IDs , data=final.data)
+
+#anova_summary(Nr_seeds_AN, detailed = TRUE)
+
+summary(Nr_seeds_AN)
+#capture.output(summary(Nr_seeds_AN),file="test.doc")
+```
+
+```{r}
+DisplayAnovaSummary(model_summary_object = Nr_seeds_AN, title = "TITLE", title_font_size = 16,footnote = "footnote")
+```
+
+```{r}
+Di
+```
+
+```{r}
+library(gridExtra)
+```
+
+```{r}
+Nr_seeds_AN_G<- aov(Nr_seeds~treatment*Group, data=final.data)
+summary(Nr_seeds_AN_G)
+anova_summary(Nr_seeds_AN_G, detailed=TRUE)
+```
+
+```{r}
+tukey.nr.seeds<- TukeyHSD(Nr_seeds_AN, conf.levels=.95)
+
+tukey.cld.nr.seeds<- multcompLetters4(Nr_seeds_AN, tukey.nr.seeds)
+tukey.cld.nr.seeds
+```
+
+```{r}
+summary_Nr_seeds<- group_by(final.data, treatment,IDs) %>%
+summarise(mean=mean(Nr_seeds), sd=sd(Nr_seeds))%>%
+          arrange(desc(mean))
+ View(summary_Nr_seeds)
+
+
+cld_NAS<- as.data.frame.list(tukey.cld.nr.seeds$ `treatment:IDs`)
+summary_Nr_seeds$tukey <- cld_NAS$Letters
+View(summary_Nr_seeds)
+```
+
+```{r}
+write.table(summary_Nr_seeds, "summary_Nr_seeds")
+```
+
+```{r}
+summary_Nr_all_seeds <- read.table("summary_Nr_seeds")
+summary_Nr_all_seeds$IDs <- as.factor(summary_Nr_all_seeds$IDs)
+summary_Nr_all_seeds$treatment <- as.factor(summary_Nr_all_seeds$treatment)
+```
+
+```{r}
+
+NAS<- ggplot(data=summary_Nr_all_seeds, aes(x =IDs, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Number of the seeds") +
+   theme_bw() +
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+#scale_fill_manual(values=c("lightblue","red","blue","red"))+
+geom_text(aes(label=round(mean,2), y = -8), position = position_dodge(0.90), colour="black", size= 4)
+print(NAS)
+```
+
+```{r}
+Nr_seeds_AN_G<- aov(Nr_seeds~treatment*Group, data=final.data)
+summary(Nr_seeds_AN_G)
+
+anova_table<- nice_table(Nr_seeds_AN_G)
+```
+
+```{r}
+tukey<- TukeyHSD(Nr_seeds_AN_G, conf.level = 0.95)
+tukey.cld.Nr.seeds<- multcompLetters4(Nr_seeds_AN_G, tukey)
+tukey.cld.Nr.seeds
+```
+
+# TKW trait
+
+```{r}
+str(final.data)
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+tkw <- ggplot(final.data, aes(x=IDs, y=TKW,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="TKW [g]", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+
+
+    print(tkw)
+```
+
+```{r}
+tkw_AN<- aov(TKW~treatment*IDs , data=final.data)
+summary(tkw_AN)
+
+
+
+tkw_AN_G<- aov(TKW~treatment*Group, data=final.data)
+summary(tkw_AN_G)
+
+#mood.medtest(TKW~Group,
+  #           data  = final.data,
+   #          exact = FALSE)
+```
+
+```{r}
+tukey.t.g<- TukeyHSD(tkw_AN_G, conf.levels=.95)
+
+tukey.cld.tkw.g<- multcompLetters4(tkw_AN_G, tukey.t.g)
+tukey.cld.tkw.g
+
+
+LSD_Test<- print(LSD.test(tkw_AN_G, c("treatment","Group")))
+```
+
+```{r}
+summary_tkw_g<- group_by(final.data, treatment,Group) %>%
+summarise(mean=mean(TKW), sd=sd(TKW))%>%
+          arrange(desc(mean))
+ View(summary_tkw_g)
+```
+
+```{r}
+lsd_summary<- as.data.frame.list(LSD_Test$ groups)
+summary_tkw_g$lsd<- lsd_summary$groups
+View(summary_tkw_g)
+write.table(summary_tkw_g, "lsd-summary-tkw-Gt.csv")
+```
+
+```{r}
+lsd_tkw_Int<- read.table( "lsd-summary-tkw-Gt.csv")
+
+lsd_tkw_Int$treatment<- as.factor(lsd_tkw_Int$treatment)
+lsd_tkw_Int$Group<- as.factor(lsd_tkw_Int$Group)
+str(lsd_tkw_Int)
+```
+
+```{r}
+
+tkw<- ggplot(data=lsd_tkw_Int, aes(x =treatment, y = mean, fill=Group)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= lsd),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Groups", y="TKW [g]") +
+   theme_bw() +
+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+#scale_fill_manual(values=c("lightblue","red","blue","red"))+
+geom_text(aes(label=round(mean,2), y = .5), position = position_dodge(0.90), colour="black", size= 5)
+print(tkw)
+```
+
+```{r}
+options(repr.plot.width=10,  repr.plot.height=7)
+tkwg<- ggplot(data=lsd_tkw_Int, aes(x =Group, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= lsd),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Groups", y="TKW [g]") +
+   theme_bw() +
+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+scale_fill_manual(values=c("#E7B800", "#FC4E07","#E7B800", "#FC4E07"))+
+geom_text(aes(label=round(mean,2), y = 5), position = position_dodge(0.90), colour="black", size= 5)
+print(tkwg)
+```
+
+```{r}
+tkw_AN<- aov(TKW~treatment*IDs , data=final.data)
+summary(tkw_AN)
+```
+
+```{r}
+tukey<- TukeyHSD(tkw_AN, conf.levels=.95)
+tukey.cld.tkw<- multcompLetters4(tkw_AN, tukey)
+tukey.cld.tkw
+
+summary_tkw<- group_by(final.data,treatment, IDs) %>%
+summarise(mean=mean(TKW), sd=sd(TKW)) %>%
+arrange(desc(mean))
+View(summary_tkw)
+
+cld_tkw<- as.data.frame.list(tukey.cld.tkw$ `treatment:IDs`)
+summary_tkw$tukey <- cld_tkw$Letters
+View(summary_tkw)
+write.table(summary_tkw, "summary_tkw_August.csv")
+```
+
+```{r}
+tkw_Int<- read.table("summary_tkw_August.csv")
+tkw_Int$IDs <- as.factor(tkw_Int$IDs)
+tkw_Int$treatment <- as.factor(tkw_Int$treatment)
+str(tkw_Int)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+TKW_Int <- ggplot(data=tkw_Int, aes(x =IDs, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="TKW[g]") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+geom_text(aes(label=round(mean,2), y = 4), position = position_dodge(0.90), colour="black", size= 4)
+print(TKW_Int)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+TKW_Int <- ggplot(data=tkw_Int, aes(x =IDs, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="TKW[g]") +
+   theme_bw() +
+facet_wrap(~treatment)+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+geom_text(aes(label=round(mean,2), y = 4), position = position_dodge(0.90), colour="black", size= 4)
+print(TKW_Int)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+TKW_Int <- ggplot(data=tkw_Int, aes(x =treatment, y = mean, fill=IDs, colour=IDs)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="TKW[g]") +
+   theme_bw() +
+#theme(axis.text.x = element_text(colour=c("black","red","red","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+theme(legend.position = "top", legend.text = element_text(color = "black"))+
+
+
+#scale_fill_discrete(labels = c("2007", "2156(L)", "2297(L)","2352(L)", "2496", "2095(L)","2218", "2321(L)", "2364"))+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 4), position = position_dodge(0.90), colour="black", size= 4)
+print(TKW_Int)
+```
+
+# Number of the unqualified seeds (Hollow, broken, defected by bathpgen and etc)
+
+```{r}
+str(final.data)
+```
+
+```{r}
+PS_AN<- aov(Poor_seeds~treatment*IDs, data=final.data)
+summary(PS_AN)
+
+PS_AN_G<- aov(Poor_seeds~treatment*Group, data=final.data)
+summary(PS_AN_G)
+
+
+PS_AN_G1<- aov(Poor_seeds~Group, data=final.data)
+Anova(PS_AN_G1,type= "III")
+summary(PS_AN_G1)
+
+
+#lsd.test<- print(LSD.test(PS_AN_G, "Group"))
+#lsd.test<- print(LSD.test(PS_AN_G, c("treatment","Group")))
+#a<- kruskal.test(Poor_seeds~Group, data=final.data)
+#a
+#tukey<- TukeyHSD(PS_AN_G, conf.levels=.95)
+tukey.cld.ps<- multcompLetters4(PS_AN,TukeyHSD(PS_AN, conf.levels=.95))
+tukey.cld.ps
+
+tukey.cld.G<- multcompLetters4(PS_AN_G,TukeyHSD(PS_AN_G, conf.levels=.95))
+tukey.cld.G
+```
+
+```{r}
+a<- t.test(Poor_seeds~treatment ,data=final.data, equal.vara=FALSE)
+a
+
+ab<- t.test(Poor_seeds~Group ,data=final.data, equal.vara=FALSE)
+ab
+```
+
+```{r}
+pwc1 <- final.data %>% 
+pairwise_t_test(Poor_seeds~Group, pool.sd = TRUE, p.adjust.method = "bonferroni")
+pwc1
+
+
+pairwise.t.test(x = final.data$Poor_seeds, g = final.data$Group, p.adjust.method = "bonferroni",
+, var.equal = FALSE)
+```
+
+```{r}
+options(repr.plot.width=10,  repr.plot.height=15)
+boxplot(Poor_seeds~Group,data=final.data)
+boxplot(Poor_seeds~treatment,data=final.data)
+boxplot(Poor_seeds~IDs,data=final.data)
+```
+
+```{r}
+summary(final.data)
+```
+
+```{r}
+leveneTest(Poor_seeds~Group, data=final.data)
+with(final.data, shapiro.test(Poor_seeds[Groups=="Low"]))
+with(final.data, shapiro.test(Poor_seeds[Groups=="High"]))
+
+```
+
+# To check the medians of two groups for poor seeds
+
+```{r}
+library(RVAideMemoire)
+mood.medtest(Poor_seeds~Group, data=final.data, exact=TRUE)
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+tkw <- ggplot(final.data, aes(x=IDs, y=Poor_seeds,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="PS", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+
+
+    print(tkw)
+```
+
+```{r}
+a<- mean(final.data$Poor_seeds[final.data$Group=="Low"])
+a
+
+b<- mean(final.data$Poor_seeds[final.data$Group=="High"])
+b
+```
+
+```{r}
+length(final.data$Poor_seeds[final.data$Group=="Low"])
+length(final.data$Poor_seeds[final.data$Group=="High"])
+
+length(final.data$Poor_seeds[final.data$treatment=="ww"])
+length(final.data$Poor_seeds[final.data$treatment=="ds"])
+```
+
+```{r}
+summary_PS<- group_by(final.data, treatment, IDs) %>%
+summarise(mean=mean(Poor_seeds), sd=sd(Poor_seeds)) %>%
+arrange(desc(mean))
+
+
+cld_ps_Int<- as.data.frame.list(tukey.cld.ps$`treatment:IDs`)
+summary_PS$tukey <- cld_ps_Int$Letters
+View(summary_PS)
+write.table(summary_PS, "summayr_PS_Int_August.csv")
+
+
+summary_PS_Gt<- group_by(final.data, treatment, Group) %>%
+summarise(mean=mean(Poor_seeds), sd=sd(Poor_seeds)) %>%
+arrange(desc(mean))
+
+
+cld_ps_Gt<- as.data.frame.list(tukey.cld.G$`treatment:Group`)
+summary_PS_Gt$tukey <- cld_ps_Gt$Letters
+View(summary_PS_Gt)
+write.table(summary_PS_Gt, "summayr_PS_Gt_August.csv")
+```
+
+```{r}
+summary_ps_Int<- read.table("summayr_PS_Int_August.csv")
+summary_ps_Int$IDs<-as.factor(summary_ps_Int$IDs)
+summary_ps_Int$treatment<-as.factor(summary_ps_Int$treatment)
+
+
+summary_ps_gt<- read.table("summayr_PS_Gt_August.csv")
+summary_ps_gt$Group<-as.factor(summary_ps_gt$Group)
+summary_ps_gt$treatment<-as.factor(summary_ps_gt$treatment)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+ps <- ggplot(data=summary_ps_Int, aes(x =IDs, y = mean, fill=treatment, colour=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_poor seeds") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 4), position = position_dodge(0.90), colour="black", size= 4)
+print(ps)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+ps <- ggplot(data=summary_ps_gt, aes(x =treatment, y = mean, fill=Group )) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-15, hjust=.05, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_poor seeds") +
+   theme_bw() +
+scale_fill_manual(values=c("purple","magenta"))+
+#theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 0.5), position = position_dodge(0.90), colour="black", size= 4)
+print(ps)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+ps2 <- ggplot(data=summary_ps_gt, aes(x =Group, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-20, hjust=-.2, size = 4, colour = "darkblue") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_poor seeds") +
+   theme_bw() +
+#theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 3), position = position_dodge(0.60), colour="black", size= 4)
+print(ps2)
+```
+
+# Qualified seeds
+
+str(final.data)
+
+```{r}
+boxplot(Mature_seeds~Group, data=final.data)
+boxplot(Mature_seeds~treatment, data=final.data)
+boxplot(Mature_seeds~IDs, data=final.data)
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+QS <- ggplot(final.data, aes(x=IDs, y=Mature_seeds,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="QS", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","red","red","red","black","black")))
+
+
+
+    print(QS)
+```
+
+```{r}
+MS_AN<- aov(Mature_seeds~treatment*IDs, data=final.data)
+summary(MS_AN)
+
+
+#mood.medtest(Mature_seeds~Group, data=final.data, exact=TRUE)
+MS_AN_G<- aov(Mature_seeds~treatment*Group, data=final.data)
+summary(MS_AN_G)
+
+tukey<- TukeyHSD(MS_AN, conf.levels=.95)
+cld<- multcompLetters4(MS_AN, tukey)
+cld
+
+```
+
+```{r}
+summary_Qs<- group_by(final.data, treatment, IDs)%>%
+summarise(mean=mean(Mature_seeds), sd=sd(Mature_seeds))%>%
+arrange(desc(mean))
+#View(summary_Qs)
+
+
+cld_Qs<- as.data.frame.list(cld$`treatment:IDs`)
+summary_Qs$tukey<- cld_Qs$Letters
+View(summary_Qs)
+write.table(summary_Qs,"summary_Int_QS_August.csv")
+```
+
+```{r}
+QS_Int <- read.table("summary_Int_QS_August.csv")
+QS_Int$IDs <- as.factor(QS_Int $IDs)
+QS_Int$treatment <- as.factor(QS_Int $treatment)
+str(QS_Int )
+class(QS_Int)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+graph <- ggplot(data=as.data.frame(QS_Int), aes(x =IDs, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_qualified seeds") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 10), position = position_dodge(0.90), colour="black", size= 4)
+print(graph)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+
+QS_Int_l <- ggplot(data=as.data.frame(QS_Int), aes(x =treatment, y = mean, fill=IDs, colour=IDs)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_qualified seeds") +
+   theme_bw() +
+#theme(axis.text.x = element_text(colour=c("black","red","red","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = 4), position = position_dodge(0.90), colour="black", size= 4)
+print(QS_Int_l)
+```
+
+```{r}
+pwc <- final.data %>% 
+  pairwise_t_test(
+   Mature_seeds ~ Group, pool.sd = TRUE,
+    p.adjust.method = "bonferroni")
+pwc
+```
+
+# Number of the half-full ears(spikes)
+
+```{r}
+str(final.data)
+```
+
+```{r}
+boxplot(Half_ear~Group, data=final.data)
+boxplot(Half_ear~treatment, data=final.data)
+boxplot(Half_ear~IDs, data=final.data)
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=10)
+HE <- ggplot(final.data, aes(x=IDs, y=Half_ear,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="half_ear", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+
+
+    print(HE)
+```
+
+```{r}
+HE_AN<- aov(Half_ear~treatment*IDs, data=final.data)
+summary(HE_AN)
+ tukey<- TukeyHSD(HE_AN, conf.levels=.95)
+cld<- multcompLetters4(HE_AN, tukey) 
+cld
+```
+
+```{r}
+HE_AN_G<- aov(Half_ear~treatment*Group, data=final.data)
+summary(HE_AN_G)
+```
+
+```{r}
+pwc1 <- final.data %>% 
+pairwise_t_test(Half_ear~treatment, pool.sd = TRUE, p.adjust.method = "bonferroni")
+pwc1
+
+
+pwc2 <- final.data %>% 
+pairwise_t_test(Half_ear~Group, pool.sd = TRUE, p.adjust.method = "bonferroni")
+pwc2
+```
+
+```{r}
+summary_HE<- group_by(final.data, treatment, IDs) %>%
+summarise(mean=(round(mean(Half_ear),2)), sd=sd(Half_ear)) %>%
+arrange(desc(mean))
+View(summary_HE)
+
+
+cld_HE<- as.data.frame.list(cld$`treatment:IDs`)
+summary_HE$tukey<- cld_HE$Letters
+View(summary_HE)
+write.table(summary_HE, "summary_int_HE_August.csv")
+```
+
+```{r}
+HE_Int<- read.table( "summary_int_HE_August.csv")
+HE_Int$IDs <- as.factor(HE_Int $IDs)
+HE_Int$treatment <- as.factor(HE_Int $treatment)
+str(HE_Int)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+HE <- ggplot(data=as.data.frame(HE_Int), aes(x =IDs, y = mean, fill=treatment, colour=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_half full ears") +
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = -0.4), position = position_dodge(0.90), colour="blue", size= 4)
+print(HE)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+HEl <- ggplot(data=as.data.frame(HE_Int), aes(x =treatment, y = mean, fill=IDs, colour=IDs)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-15, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_half full ears") +
+   theme_bw() +
+#theme(axis.text.x = element_text(colour=c("black","red","red","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = -0.5), position = position_dodge(0.90), colour="blue", size= 4)
+print(HEl)
+```
+
+# Number of the full ears
+
+```{r}
+str(final.data)
+```
+
+```{r}
+boxplot(Full_ear~Group, data=final.data)
+boxplot(Full_ear~treatment, data=final.data)
+boxplot(Full_ear~IDs, data=final.data)
+```
+
+```{r}
+options(repr.plot.width=15, repr.plot.height=10)
+FE <- ggplot(final.data, aes(x=IDs, y=Full_ear,  fill=treatment))+
+       geom_boxplot()+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("blue", "red")) +
+        labs(y="Full_ears", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+
+
+    print(FE)
+```
+
+```{r}
+FE_AN<-aov(Full_ear~treatment*IDs, data=final.data)
+summary(FE_AN)
+
+
+FE_AN_G<- aov(Full_ear~treatment*Group, data=final.data)
+summary(FE_AN_G)
+
+tukey<- TukeyHSD(FE_AN, conf.levels=.95)
+cld_FE<- multcompLetters4(FE_AN ,tukey)
+cld_FE
+```
+
+```{r}
+summary_FE_t<- group_by(final.data, treatment) %>%
+summarise(mean=mean(Full_ear), sd=sd(Full_ear)) %>%
+arrange(desc(mean))
+View(summary_FE_t)
+
+
+summary_FE_l<- group_by(final.data, IDs) %>%
+summarise(mean=mean(Full_ear), sd=sd(Full_ear)) %>%
+arrange(desc(mean))
+View(summary_FE_l)
+
+
+
+cld_FE_t <- as.data.frame.list(cld_FE$treatment)
+summary_FE_t$tukey <- cld_FE_t$Letters
+View(summary_FE_t)
+write.table(summary_FE_t, "summary_full_ear_t_August.csv")
+
+
+cld_FE_l <- as.data.frame.list(cld_FE$IDs)
+summary_FE_l$tukey <- cld_FE_l$Letters
+View(summary_FE_l)
+write.table(summary_FE_l, "summary_full_ear_l_August.csv")
+```
+
+```{r}
+FE_t<- read.table("summary_full_ear_t_August.csv")
+FE_l<- read.table("summary_full_ear_l_August.csv")
+
+FE_l$IDs <- as.factor(FE_l $IDs)
+FE_t$treatment <- as.factor(FE_t $treatment)
+```
+
+```{r}
+options(repr.plot.width=11, repr.plot.height=7)
+full_ear_t<- ggplot(data=FE_t, aes(x =treatment, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  #geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 4, colour = "black") +
+    #geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Treatments", y="Nr_full ears") +
+   theme_bw() +
+ylim(0,11)+
+theme(axis.text.x = element_text(colour=c("black","black")))+
+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+scale_fill_manual(values=c("pink4","pink3"))+
+
+geom_segment(x=1, y=9.5, xend=2, yend=9.5,color="black")+
+
+geom_text(x=1.5, y=10, label="< 2e-16 ***", size=5,color="black")+
+geom_text(aes(label=round(mean,2), y = .5), position = position_dodge(0.90), colour="black", size= 5)
+print(full_ear_t)
+```
+
+```{r}
+options(repr.plot.width=10, repr.plot.height=7)
+
+full_ear_l<- ggplot(data=FE_l, aes(x =IDs, y = mean, fill=IDs)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-0.9, hjust=-0.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Groups", y="Nr_ full ears")+
+theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+#scale_fill_manual(values=c("#d8b365","#5ab4ac","#d8b365","#5ab4ac"))+
+geom_text(aes(label=round(mean,2), y = .5), position = position_dodge(0.90), colour="black", size= 5)
+print(full_ear_l)
+```
+
+# Number of the shoots having ear
+
+```{r}
+str(final.data)
+```
+
+```{r}
+boxplot(Shoots_with_ear~Group, data=final.data)
+boxplot(Shoots_with_ear~treatment, data=final.data)
+boxplot(Shoots_with_ear~IDs, data=final.data)
+```
+
+```{r}
+options(repr.plot.width=15, repr.plot.height=10)
+SWE<- ggplot(final.data, aes(x=IDs, y=Shoots_with_ear,  fill=treatment))+
+       geom_boxplot()+
+#scale_fill_manual(values=c("pink4","pink3"))+
+       theme(text=element_text(size = 20))+
+       scale_fill_manual(breaks = final.data$treatment,
+                    values = c("turquoise4","maroon4")) +
+        labs(y="Nr_shoots with ear", x="lines")+
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))
+
+
+
+    print(SWE)
+```
+
+```{r}
+SWE_AN<- aov(Shoots_with_ear~treatment*IDs, data=final.data)
+summary(SWE_AN)
+
+
+SWE_AN_G<- aov(Shoots_with_ear~Group*treatment, data=final.data)
+summary(SWE_AN_G)
+```
+
+```{r}
+tukey<- TukeyHSD(SWE_AN, conf.levels=.95)
+cld.swe<- multcompLetters4(SWE_AN,tukey)
+cld.swe
+
+
+summary_swe_Int<- group_by(final.data, treatment,IDs) %>%
+summarise(mean=mean(Shoots_with_ear), sd=sd(Shoots_with_ear)) %>%
+arrange(desc(mean))
+View(summary_swe_Int)
+
+cld<- as.data.frame.list(cld.swe$`treatment:IDs`)
+summary_swe_Int$tukey<- cld$Letters
+View(summary_swe_Int)
+write.table(summary_swe_Int, "summary_SWE_Int.casv")
+```
+
+```{r}
+SWE_Int<-  read.table("summary_SWE_Int.casv")
+
+SWE_Int$IDs <- as.factor(SWE_Int $IDs)
+SWE_Int$treatment <- as.factor(SWE_Int $treatment)
+```
+
+```{r}
+options(repr.plot.width=15,  repr.plot.height=10)
+SWE <- ggplot(data=as.data.frame(SWE_Int), aes(x =IDs, y = mean, fill=treatment)) + 
+  geom_bar(stat = "identity", position = "dodge" ) +
+  geom_text(aes(label= tukey),position=position_dodge(0.90),  vjust=-11, hjust=.5, size = 4, colour = "black") +
+    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position = position_dodge(0.9), width = 0.25) +
+ labs(x="Lines", y="Nr_Shoots with ears") +
+scale_fill_manual(values=c("tomato2","royalblue3"))+
+   theme_bw() +
+theme(axis.text.x = element_text(colour=c("black","red","red","black","black","red","red","red","black","black")))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position = "top")+
+theme(text = element_text(size = 16))+
+geom_text(aes(label=round(mean,2), y = -0.4), position = position_dodge(0.90), colour="black", size= 4)
+print(SWE)
+```
+
+# Number of the shoots without ear( empthy shoots)
+
+```{r}
+str(final.data)
+boxplot(Shoots_without_ear~Group, data=final.data)
+boxplot(Shoots_without_ear~treatment, data=final.data)
+boxplot(Shoots_without_ear~IDs, data=final.data)
+```
+
+```{r}
+SNE<- aov(Shoots_without_ear~treatment*IDs, data=final.data)
+summary(SNE)
+
+SNE_G<- aov(Shoots_without_ear~treatment*Group, data=final.data)
+summary(SNE_G)
+
+pwc2 <- final.data %>% 
+pairwise_t_test(Shoots_without_ear~Group, pool.sd = TRUE, p.adjust.method = "bonferroni")
+pwc2
+
+
+pwc1 <- final.data %>% 
+pairwise_t_test(Shoots_without_ear~treatment, pool.sd = TRUE, p.adjust.method = "bonferroni")
+pwc1
+```
+
+```{r}
+final_data_clustring<- read.csv("final.data.allgen.csv",sep=",", header=TRUE)
+head(final.data_clustring)
+```
+
+```{r}
+UniGenotypes<- unique(final_data_clustring$IDs)
+UniGenotypes
+```
+
+```{r}
+idx=1
+genotypes_table = list()
+for (i in UniGenotypes){
+genotypes_table[[idx]]<- subset(final_data_clustring, IDs==i)
+
+idx=idx+1
+
+}
+```
+
+```{r}
+genotypes_table
+```
+
+```{r}
+colnames(final_data_clustring)
+```
+
+```{r}
+data18<- genotypes_table[[1]]
+data56<- genotypes_table[[2]]
+data97<- genotypes_table[[3]]
+data52<- genotypes_table[[4]]
+data64<- genotypes_table[[5]]
+data95<- genotypes_table[[6]]
+data21<- genotypes_table[[7]]
+data67<- genotypes_table[[8]]
+data07<- genotypes_table[[9]]
+data96<- genotypes_table[[10]]
+```
+
+```{r}
+data2218<- group_by(data18,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2218)
+
+data2156<- group_by(data56,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2156)
+
+data2297<- group_by(data97,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2297)
+
+data2352<- group_by(data52,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2352)
+
+data2364<- group_by(data64,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2364)
+
+data2095<- group_by(data95,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2095)
+
+data2321<- group_by(data21,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+head(data2321)
+
+data2267<- group_by(data67,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2267)
+
+data2007<- group_by(data07,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2007)
+
+data2496<- group_by(data96,IDs,treatment,Groups)%>%
+summarise_at(c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear","Nr_ears","Full_ear","Half_ear","Weight_ear", 
+               "Nr_seeds","Mature_seeds","Poor_seeds","all.seeds.weight","TKW"), mean, na.rm = TRUE)
+ head(data2496)
+```
+
+```{r}
+data2218[16]<- NULL
+data2156[16]<- NULL
+data2297[16]<- NULL
+data2352[16]<- NULL
+data2364[16]<- NULL
+data2095[16]<- NULL
+data2321[16]<- NULL
+data2267[16]<- NULL
+data2007[16]<- NULL
+data2496[16]<- NULL 
+```
+
+```{r}
+head(data2218)
+head(data2156)
+head(data2297)
+head(data2352)
+head(data2364)
+head(data2095)
+head(data2321)
+head(data2267)
+head(data2007)
+head(data2496)
+```
+
+```{r}
+cluster_data<- rbind(data2218,data2156, data2297, data2352, data2364, data2095, data2321, data2267, data2007, data2496)
+cluster_data
+write.table(cluster_data, "harvest_final_cluster_data.csv")
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(stats))
+suppressPackageStartupMessages(library(dendextend))
+set.seed(142)
+```
+
+```{r}
+
+cluster_data<- read.table( "harvest_final_cluster_data.csv")
+cluster_data$IDs<- as.character(cluster_data$IDs)
+cluster_data$treatment<- as.character(cluster_data$treatment)
+cluster_data$Groups<- as.character(cluster_data$Groups)
+str(cluster_data)
+```
+
+```{r}
+as.data.frame(cluster_data)
+typeof(cluster_data)
+```
+
+```{r}
+rownames(cluster_data) <- c("BMW_2218_2","BMW_2218","BMW_2156_2","BMW_2156","BMW_2297_2","BMW_2297","BMW_2352_2","BMW_2352","BMW_2364_2",
+                                   "BMW_2364","BMW_2095_2", "BMW_2095",
+                                   "BMW_2321_2","BMW_2321","BMW_2267_2","BMW_2267","BMW_2007_2","BMW_2007","BMW_2496_2","BMW_2494")
+cluster_data
+```
+
+```{r}
+cluster_data2<-cluster_data [,-1]
+cluster_data2
+```
+
+```{r}
+
+str(cluster_data)
+Cluster_mut <- cluster_data2%>% 
+      mutate(color_treatment = case_when(
+              treatment == "ww" ~ "green",
+             treatment == "ds" ~ "red"))
+#Cluster_mut
+
+Cluster_mut2 <- Cluster_mut%>% 
+      mutate(color_Groups = case_when(
+              Groups == "High" ~ "blue",
+             Groups == "Low" ~ "orange"))
+Cluster_mut2
+```
+
+```{r}
+options(repr.plot.width = 20, repr.plot.height = 10, repr.plot.res = 100)
+cluster_data <- cluster_data2%>%
+select(-treatment,-Groups) %>%
+#column_to_rownames("genotype") %>%
+dist(method="euclidean") %>%
+ hclust(method = "single") %>%
+as.dendrogram()
+
+cluster_data %>%
+ plot(axes=FALSE, main = "Dataset 1: 'Rowtype-mutant' (2 batches)")
+cluster_t <-Cluster_mut2$color_treatmen
+colored_bars(colors = cluster_t, dend = cluster_data, rowLabels = "Treatment")
+```
+
+```{r}
+par(mar=c(18,6,1,10))
+cluster_data %>%
+
+        set("leaves_pch",19)  %>% 
+        set("labels_cex", 1.5) %>%
+        set("branches_lwd", 4)%>%
+        color_branches(k = 7) %>%
+        plot(axes=FALSE, main = "BMW population(final harvest)clustring")
+cluster_t <- Cluster_mut2$color_treatment
+cluster_g <- Cluster_mut2$color_Groups
+both_bars<- cbind(cluster_t, cluster_g)
+colored_bars(colors =both_bars, dend = cluster_data, , rowLabels = c("Treatments","CID groups")) 
+
+#legend("topright", legend =c("Control", "stress"), fill = c(3,2))
+#legend("topleft", legend =c("High-CID", "Low_CID"), fill = c(7,4))
+legend(aes(x=0.1, y=130.500), 
+     legend = c("Control" , "Drought" , "High-CID" , "Low_CID" ), 
+     col = c("green", "red" , "blue" , "orange" ),
+            pch = c(20,20,20,20), bty = "b",  pt.cex = 1.5, cex = 1.3, 
+     text.col = "black", horiz = FALSE, inset = c(0, 0))
+```
+
+# joining both data set(phenospex and harvest)
+
+```{r}
+finall_cluster_data<- read.table("/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/finall_data_clustring.csv")
+```
+
+```{r}
+finall_cluster_data$genotype<- as.character(finall_cluster_data$genotype)
+finall_cluster_data$treatment<- as.character(finall_cluster_data$treatment)
+finall_cluster_data$Groups<- as.character(finall_cluster_data$Groups)
+str(finall_cluster_data)
+```
+
+```{r}
+cluster_data<- read.table( "harvest_final_cluster_data.csv")
+cluster_data$IDs<- as.character(cluster_data$IDs)
+cluster_data$treatment<- as.character(cluster_data$treatment)
+cluster_data$Groups<- as.character(cluster_data$Groups)
+str(cluster_data)
+```
+
+```{r}
+
+names(cluster_data)[1]<- "genotype"
+finall_cluster_data
+cluster_data
+```
+
+```{r}
+finall_cluster_data$genotype <- gsub("[BMW_]","", finall_cluster_data$genotype)
+colnames(finall_cluster_data)[4] = "digital_biomass"
+```
+
+```{r}
+
+head(finall_cluster_data[,])
+```
+
+```{r}
+joinTabl = cbind(cluster_data, finall_cluster_data[,4:length(colnames(finall_cluster_data))])
+head(joinTabl)
+```
+
+```{r}
+rownames(joinTabl) <- c("BMW_2218_2","BMW_2218","BMW_2156_2","BMW_2156","BMW_2297_2","BMW_2297","BMW_2352_2","BMW_2352","BMW_2364_2",
+                                   "BMW_2364","BMW_2095_2", "BMW_2095",
+                                   "BMW_2321_2","BMW_2321","BMW_2267_2","BMW_2267","BMW_2007_2","BMW_2007","BMW_2496_2","BMW_2494")
+joinTabl
+```
+
+```{r}
+cluster_data3<-joinTabl [,-1]
+cluster_data3
+```
+
+```{r}
+
+Cluster_mut <- cluster_data3%>% 
+      mutate(color_treatment = case_when(
+              treatment == "ww" ~ "green",
+             treatment == "ds" ~ "red"))
+#Cluster_mut
+
+Cluster_mut3 <- Cluster_mut%>% 
+      mutate(color_Groups = case_when(
+              Groups == "High" ~ "blue",
+             Groups == "Low" ~ "orange"))
+Cluster_mut3
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(stats))
+suppressPackageStartupMessages(library(dendextend))
+set.seed(142)
+```
+
+```{r}
+options(repr.plot.width = 20, repr.plot.height = 10, repr.plot.res = 100)
+cluster_data <- cluster_data3%>%
+select(-treatment,-Groups) %>%
+#column_to_rownames("genotype") %>%
+dist(method="euclidean") %>%
+ hclust(method = "single") %>%
+as.dendrogram()
+
+cluster_data %>%
+ plot(axes=FALSE, main = "Dataset 1: 'Rowtype-mutant' (2 batches)")
+cluster_t <-Cluster_mut2$color_treatmen
+colored_bars(colors = cluster_t, dend = cluster_data, rowLabels = "Treatment")
+```
+
+```{r}
+par(mar=c(18,6,1,10))
+cluster_data %>%
+
+        set("leaves_pch",19)  %>% 
+        set("labels_cex", 1.5) %>%
+        set("branches_lwd", 4)%>%
+        color_branches(k = 3) %>%
+        plot(axes=FALSE, main = "BMW population(final harvest)clustring")
+cluster_t <- Cluster_mut3$color_treatment
+cluster_g <- Cluster_mut3$color_Groups
+both_bars<- cbind(cluster_t, cluster_g)
+colored_bars(colors =both_bars, dend = cluster_data, , rowLabels = c("Treatments","CID groups")) 
+
+#legend("topright", legend =c("Control", "stress"), fill = c(3,2))
+#legend("topleft", legend =c("High-CID", "Low_CID"), fill = c(7,4))
+legend(aes(x=5, y=3999902), 
+     legend = c("Control" , "Drought" , "High-CID" , "Low_CID" ), 
+     col = c("green", "red" , "blue" , "orange" ),
+            pch = c(20,20,20,20), bty = "b",  pt.cex = 1.5, cex = 1.3, 
+     text.col = "black", horiz = FALSE, inset = c(0, 0))
+```
+
+```{r}
+a=seq(3e+06, 4e+06, 0.5)
+a
+```
+
