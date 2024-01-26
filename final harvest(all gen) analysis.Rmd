@@ -41,11 +41,11 @@ f.data[8:9]<- NULL
 f.data[19]<- NULL 
 
 
-```{r}
-head(f.data)
-```
 
-```{r}
+head(f.data)
+
+
+
 names(f.data)[1]<- "Unit"
 names(f.data)[8]<- "Biomass"
 names(f.data)[7]<- "max.Height"
@@ -62,41 +62,41 @@ names(f.data)[18]<- "Poor_seeds"
 names(f.data)[20]<- "TKW"
 str(f.data)
 head(f.data)
-```
 
-```{r}
+
+
 f.data[,7]
-```
 
-```{r}
+
+
 f.data[54,7] <- "84.7"
 f.data[53:60,]
 str(f.data)
 f.data$max.Height <- as.numeric(f.data$max.Height)
-```
 
-```{r}
+
+
 f.data$treatment <- as.factor(f.data$treatmen)
 f.data$Unit <- as.character(f.data$Unit)
 f.data$IDs <- as.factor(f.data$IDs)
 f.data$TKW<- round(f.data$TKW, digits=2)
 View(f.data)
-```
 
-```{r}
+
+
 #logic = str_detect(f.data$IDs, "2267")
 #f.data = f.data[!logic,]
 length(unique(f.data$IDs))
-```
 
-```{r}
+
+
 f.data[59, ]
 final.data <- f.data[-59, ]
 #View(final.data)
 dim(final.data)
-```
 
-```{r}
+
+
 check=unique(final.data$IDs)
 check
 str(final.data)
@@ -104,13 +104,13 @@ str(final.data)
 final.data$IDs <- droplevels(final.data$IDs)
 str(final.data)
 levels(final.data$IDs)
-```
 
-```{r}
+
+
 getwd()
-```
 
-```{r}
+
+
 options(repr.plot.width=20, repr.plot.height=10)
 Biomass <- ggplot(final.data, aes(x=IDs, y=Biomass, fill=treatment))+
        geom_boxplot()+
@@ -133,7 +133,7 @@ ggsave("Biomass-boxplot.png", plot = Biomass, width = 15, height = 10,
 
                          
          
-```
+
 
 ```{r}
 final.data$Unit<- as.character(final.data$Unit)
