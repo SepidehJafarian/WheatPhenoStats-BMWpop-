@@ -1,10 +1,4 @@
----
-title: An R Markdown document converted from "C:/Users/SepidehJafarian/Desktop/final
-  harvest(all gen) analysis.ipynb"
-output: html_document
----
 
-```{r}
 library(tidyverse)
 library(readxl)
 library(lme4)
@@ -22,32 +16,30 @@ library(readODS)
 library(stringr)
 library(rstatix)
 library(knitr)
-```
 
-```{r}
 getwd()
-```
 
-```{r}
+
+
 f.data<- read_ods("/home/sepideh.jafarian/Desktop/wheat_experiment/final-harvest-data-Sep2022/template for final data collection .main.ods"
                   , sheet = 1)
 
 View(f.data)
-```
 
-```{r}
+
+
 f.data$IDs <- as.character(f.data$IDs)
 f.data$IDs <- gsub("(-|_)[[:digit:]][[:digit:]]","", f.data$IDs)
 head(f.data)
-```
 
-```{r}
+
+
 f.data$Replication <- NULL
 
 f.data[8:9]<- NULL 
 
 f.data[19]<- NULL 
-```
+
 
 ```{r}
 head(f.data)
