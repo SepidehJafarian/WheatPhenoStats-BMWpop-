@@ -8,6 +8,8 @@ The repository contains all information regarding the phenotyping of BMW-populat
 
 [Multispectral 3D scanner for plant phenotyping (Phenospex, PlantEye F600)](###Multispectral)
 
+[Experimental Design](###Experimental)
+
 [Data Collection](###Data)
 
 [ANOVA Test for phenotypic traits](###ANOVA)
@@ -55,7 +57,9 @@ Precise & Objective – Reproducible plant data.
 
 For applications where detailed information or high numbers of plants are required. The PlantEye is built with high-quality standards to operate in any environment like growth chambers, labs, greenhouses, and fields.
 
+# Experimental Design
 
+the experimental design employed in this study was a Completely Randomized Design (CRD). Ten different genotypes were included in the experiment, with each genotype having two replications, resulting in a total of 200 plants. These plants were randomly distributed among the carriers within the greenhouse. The carriers were mobile, moving between booths that were equipped with a 3D camera and an irrigation system. The irrigation system was designed around the measurement of plant weight, which served as a determinant for both drought and control conditions. The initial weight of the plants was uniformly established at 4.2 kilograms, with a stress threshold set at 2.8 kilograms.
 
 # Data Collection
 
