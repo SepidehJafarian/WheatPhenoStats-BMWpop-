@@ -2,7 +2,7 @@
 
 The repository contains all information regarding the phenotyping of BMW-population in  greenhouse trials  and statistical analysis.
 
-Table of contents
+## Table of contents
 
 [establishment of BMW and MAGIC populations](###establishment)
 
