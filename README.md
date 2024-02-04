@@ -1,19 +1,12 @@
+# Identification of Marker Genes and Genes for Drought Stress Resistance in Wheat through δ13 C/12 C Isotope Discrimination
 
-[Example 1 Heading](###Example)
+The repository contains all information regarding the phenotyping of BMW-population in  greenhouse trials  and statistical analysis
+
+[establishment of BMW and MAGIC population](###establishment)
+[Phenospex (Multispectral 3D scanner for plant phenotyping)](###Phenospex)
+[Data Collection](###Data)
+[ANOVA Test for phenotypic traits](###ANOVA)
+[Tukey's HSD (honestly significant difference)](###Tukey's HSD)
+[Traits correlation](###Data)
 
 
-# BMW_phenotyping
-
-
-
-[establishment of BMWpop and MAGIC population](###establishment)
- - In this project section, the 10 selected extreme lines regarding their CID measurements, were planted into the pots in the greenhouse.
-
- 
--  All selected lines were driven from the MAGIC population and chosen based on the high genetic diversity (to represent their founders) and the precision of 
-   their measured CID (2 replications).
-
- 
--  Several growth parameters of the plants were measured using a multispectral camera in the greenhouse (Phenospex).
-  
--  The other desired traits such as the TKW, Dry Biomass, Max height, etc were measured manually.
