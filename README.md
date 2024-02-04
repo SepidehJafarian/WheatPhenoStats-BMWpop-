@@ -1,5 +1,5 @@
 
-- [Example 1 Heading](###Example)
+[Example 1 Heading](###Example)
 
 
 # BMW_phenotyping
