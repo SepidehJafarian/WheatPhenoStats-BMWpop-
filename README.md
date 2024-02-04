@@ -1,4 +1,4 @@
-- [Example 1 Heading](###Example%201%20Heading)
+
 
 ### Example 1 Heading
 
