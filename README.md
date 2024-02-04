@@ -54,3 +54,12 @@ PlantEye is a unique plant phenotyping sensor that combines 3D vision with multi
 Precise & Objective – Reproducible plant data.
 
 For applications where detailed information or high numbers of plants are required. The PlantEye is built with high-quality standards to operate in any environment like growth chambers, labs, greenhouses, and fields.
+
+
+
+# Data Collection
+
+our experiment comprises two instances of harvest that were conducted at different time intervals. The first harvest was carried out precisely 21-30 days after the implementation of drought stress (BBCH 31). We aimed to determine whether the genotypes and CID groups exhibit identical characteristics under drought conditions. To achieve these, a total of 78 plants were carefully selected from the experimental setup and utilized for the measurement of various traits. These traits encompassed the assessment of fresh and dry biomass weight, fresh and dry leaves weight, Root/shoot ratio, as well as the determination of leaf water content (LWC).
+
+
+the second harvest was carried out during the ripening stage of the plants, specifically at the BBCH 91-92 growth stage. The plants were utilized to measure certain traits manually, in parallel with the Phenospex device. In addition to this, several other traits were also measured and compared to the results obtained from the Phenospex device. These included traits such as dry biomass, maximum and average height, the weight of the ears, number of kernels, and thousand kernel weight (TKW). The main objective of this study was to ascertain whether there are any similarities between different Lines and CID (Carbon Isotope Discrimination) groups under both drought and control conditions. 
