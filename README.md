@@ -18,7 +18,7 @@ The repository contains all information regarding the phenotyping of BMW-populat
 
 [References](###References)
 
-# Establishment of BME and MAGIC populations
+# Establishment of BMW and MAGIC populations
 
 
 Eight winter wheat lines ‘Event’ (A), ‘Format’ (B), ‘BAYP4535’ (C), ‘Potenzial’ (D), ‘Ambition’ (E), ‘Bussard’ (F), ‘Firl3565’ (G), and ‘Julius’ (H) were selected as founders of an eight-way MAGIC population based on the following criteria [^1] :
