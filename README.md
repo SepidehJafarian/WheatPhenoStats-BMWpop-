@@ -6,7 +6,7 @@
 
 
 
-[establishment of BMWpop and MAGIC population](###populations)
+[establishment of BMWpop and MAGIC population](###establishment)
  - In this project section, the 10 selected extreme lines regarding their CID measurements, were planted into the pots in the greenhouse.
 
  
