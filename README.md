@@ -4,6 +4,9 @@
 
 # BMW_phenotyping
 
+
+
+[establishment of BMWpop and MAGIC population](###populations)
  - In this project section, the 10 selected extreme lines regarding their CID measurements, were planted into the pots in the greenhouse.
 
  
