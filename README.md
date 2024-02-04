@@ -6,13 +6,18 @@ The repository contains all information regarding the phenotyping of BMW-populat
 
 [establishment of BMW and MAGIC populations](###establishment)
 
+
 [Phenospex (Multispectral 3D scanner for plant phenotyping)](###Phenospex)
+
 
 [Data Collection](###Data)
 
+
 [ANOVA Test for phenotypic traits](###ANOVA)
 
+
 [Tukey's HSD (honestly significant difference](###Tukey's)
+
 
 [Traits correlation](###Traits)
 
