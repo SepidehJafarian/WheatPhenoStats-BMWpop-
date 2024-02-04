@@ -6,7 +6,7 @@ The repository contains all information regarding the phenotyping of BMW-populat
 
 [establishment of BMW and MAGIC populations](###establishment)
 
-[Phenospex (Multispectral 3D scanner for plant phenotyping)](###Phenospex)
+[Multispectral 3D scanner for plant phenotyping (Phenospex, PlantEye F600)](###Multispectral)
 
 [Data Collection](###Data)
 
@@ -34,3 +34,23 @@ Eight winter wheat lines ‘Event’ (A), ‘Format’ (B), ‘BAYP4535’ (C), 
 All founders originated from wheat breeders in Germany except for the variety ‘Ambition’, which emerged from the Nordic Seed (Denmark) breeding program. To create F1 seed, one ear per plant was used in four two-way crosses (AB, CD, EF, and GH). Out of each of the four two-way crosses, one randomly selected F1 seed was raised and two ears per plant were further mated to four-way crosses. Out of 32 available four-way crosses, sixteen independent plants were selected and crossed, to obtain eight F1 populations that involved four reciprocal cross combinations.
 
 The four eight-way crosses were further hybridized with the four reciprocal eight-way crosses to establish 16 eight-way intercross combinations (ABCDEFGH/EFGHABCD). The term ‘MAGIC group 1–16’, as used here in after, refers to these 16 subpopulations. The F1 seeds of BMWpop progressed to the F6 generation via single seed descent followed by two generations of bulk propagation in the field. The crossing procedure started in June 2009 and was completed in December 2010 followed by 5 years it took to self the plants to F6:8 recombinant inbred lines (RILs).
+
+# Multispectral 3D scanner for plant phenotyping (Phenospex, PlantEye F600)
+
+
+PlantEye is a unique plant phenotyping sensor that combines 3D vision with multispectral imaging. This patented technique captures plants non-destructively and delivers precise and objective plant parameters on plant morphology and physiology. This tool fully automates the phenotyping process and creates insights into plant growth or changes in health [^2] :
+[^2]: My reference.
+
+- 3D models with Multispectral data – Patented technology.
+
+- 20+ Plant parameters each scan – Morphological and Spectral plant parameters.
+
+- High throughput – Scan thousands of plants multiple times a day.
+
+- Non-invasive plant screening – No harvesting or moving.
+
+- All environments – Scan in direct sunlight, rain & rough conditions.
+
+Precise & Objective – Reproducible plant data.
+
+For applications where detailed information or high numbers of plants are required. The PlantEye is built with high-quality standards to operate in any environment like growth chambers, labs, greenhouses, and fields.
