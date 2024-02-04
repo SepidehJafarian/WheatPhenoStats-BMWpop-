@@ -6,18 +6,13 @@ The repository contains all information regarding the phenotyping of BMW-populat
 
 [establishment of BMW and MAGIC populations](###establishment)
 
-
 [Phenospex (Multispectral 3D scanner for plant phenotyping)](###Phenospex)
-
 
 [Data Collection](###Data)
 
-
 [ANOVA Test for phenotypic traits](###ANOVA)
 
-
 [Tukey's HSD (honestly significant difference](###Tukey's)
-
 
 [Traits correlation](###Traits)
 
@@ -26,9 +21,12 @@ The repository contains all information regarding the phenotyping of BMW-populat
 
 
 Eight winter wheat lines ‘Event’ (A), ‘Format’ (B), ‘BAYP4535’ (C), ‘Potenzial’ (D), ‘Ambition’ (E), ‘Bussard’ (F), ‘Firl3565’ (G), and ‘Julius’ (H) were selected as founders of an eight-way MAGIC population based on the following criteria [^1]:
+[^1]: My reference.
 
 (i) variation for disease resistance, quality, and agronomic traits.
+
 (ii) derivation from diverse breeding programs.
+
 (iii) importance within the respective quality group.
 
 All founders originated from wheat breeders in Germany except for the variety ‘Ambition’, which emerged from the Nordic Seed (Denmark) breeding program. To create F1 seed, one ear per plant was used in four two-way crosses (AB, CD, EF, and GH). Out of each of the four two-way crosses, one randomly selected F1 seed was raised and two ears per plant were further mated to four-way crosses. Out of 32 available four-way crosses, sixteen independent plants were selected and crossed, to obtain eight F1 populations that involved four reciprocal cross combinations.
