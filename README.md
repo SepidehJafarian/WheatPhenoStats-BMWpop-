@@ -1,9 +1,7 @@
 
 - [Example 1 Heading](###Example)
 
-### Example 1 Heading
 
-Example of heading with space
 # BMW_phenotyping
 
  - In this project section, the 10 selected extreme lines regarding their CID measurements, were planted into the pots in the greenhouse.
