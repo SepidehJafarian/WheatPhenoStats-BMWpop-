@@ -1,6 +1,3 @@
-<a name="headers"/>
-## Headers
-
 
 # BMW_phenotyping
 
