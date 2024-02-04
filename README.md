@@ -16,6 +16,7 @@ The repository contains all information regarding the phenotyping of BMW-populat
 
 [Traits correlation](###Traits)
 
+[References](###References)
 
 # Establishment of BME and MAGIC populations
 
