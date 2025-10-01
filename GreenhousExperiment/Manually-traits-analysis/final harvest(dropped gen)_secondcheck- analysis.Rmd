@@ -1,0 +1,687 @@
+---
+title: "phenotypic data analysis-new grouping-real data-dropped genotypes:final decision:GLM for all traits but different assigned families"
+author: "Sepideh"
+date: "2024-04-02"
+output: html_document
+toc: yes
+    toc_depth: '3'
+    df_print: paged
+  rmarkdown::html_document:
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    number_sections: yes
+editor_options:
+  chunk_output_type: inline
+  root.dir: "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenotypic_analysis_dropped_real_data - second_check_assumption"
+---
+
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(ARTool)
+library(purrr)
+library(lme4)
+library(viridis)
+library(afex)
+library(emmeans)
+library(ggplot2)
+library(agricolae)
+library(dplyr)
+library(multcomp)
+library(multcompView)
+library(car)
+library(readr)
+library(ggpubr)
+library(tibble)
+library(flextable)
+library(openxlsx)
+library(stringr)
+library(rcompanion)
+library(rstatix)
+library(GGally)
+library(patchwork)
+set.seed(225)
+```
+
+```{r}
+getwd()
+wd= "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenotypic_analysis_dropped_real_data - second_check_assumption/Visuallization"
+```
+
+
+
+```{r}
+#write.csv(final.data, "final.data.allgen.csv")
+final.data<- read.csv("final.data.allgen.csv",sep=",", header=TRUE)
+View(final.data)
+```
+
+
+
+
+```{r}
+dim(final.data)
+unique(final.data$IDs)
+final.data$IDs <- paste("BMW_", final.data$IDs, sep = " ")
+final.data$treatment <- factor(final.data$treatment, levels = c("ww", "ds"), labels = c("control", "drought stress"))
+head(final.data)
+
+```
+##Dropping unwanteg genotypes
+```{r}
+final.data <- final.data[!(final.data$IDs %in% c("BMW_ 2156", "BMW_ 2267")), ]
+View(final.data)
+
+```
+
+```{r}
+final.data$IDs<- as.factor(final.data$IDs)
+final.data$treatment<- as.factor(final.data$treatment)
+final.data$Group<- as.factor(final.data$Group)
+final.data$Shoots<- as.numeric(final.data$Shoots)
+final.data$Nr_ears <- as.numeric(final.data$Nr_ears )
+final.data$Full_ear <- as.numeric(final.data$Full_ear )
+final.data$Half_ear<- as.numeric(final.data$Half_ear)
+final.data$Nr_seeds <- as.numeric(final.data$ Nr_seeds )
+final.data$Mature_seeds <- as.numeric(final.data$Mature_seeds )
+final.data$Poor_seeds  <- as.numeric(final.data$Poor_seeds  )
+str(final.data)
+final.data$Groups<- NULL
+final.data$X<- NULL
+final.data$Unit<- NULL
+final.data$experiment<- NULL
+final.data$BBCH<- NULL
+final.data$Collection.date<- NULL
+
+
+```
+
+## checking the final level after dropping two genotypes
+
+```{r}
+View(final.data)
+# Check the levels before dropping
+levels(final.data$IDs)
+head(final.data)
+unique(final.data$IDs)
+# Drop the specified levels
+#final.data$IDs <- droplevels(final.data$IDs, exclude = c("BMW_ 2267", "BMW_ 2156"))
+```
+```{r}
+
+unique(final.data$IDs)
+final.data<- na.omit(final.data)
+any(is.na(final.data))
+View(final.data)
+```
+##making the correlation plot
+
+
+```{r}
+my_data<- final.data[, c(8,9,10,11,12,13,14,15,16,17,18,19,21)] 
+head(my_data)
+
+str(my_data)
+ res<- cor(my_data)
+res
+```
+####Correlation MAtrix (pearson correlation)
+
+```{r}
+library(corrplot)
+png(file = paste(wd, "correlation between the traits (Manually measured).png", sep='/'),width=10,height=5,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+## making another correlation figure only for drought condition
+```{r}
+drought_data =subset(final.data, treatment== "drought stress")
+View(drought_data)
+my_data2<- final.data[, c(8,9,10,11,12,13,14,15,16,17,18,19,21)]
+View(my_data2)
+res2<- cor(my_data2)
+res2
+```
+
+
+
+```{r}
+library(corrplot)
+png(file = paste(wd, "correlation between the traits (Manually measured)-only drought condition.png", sep='/'),width=10,height=5,units="in",res=1200)
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res2, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+```{r}
+View(final.data)
+```
+
+## check the assumptions (Normality and Variance homogenity)
+```{r}
+
+
+# Convert categorical columns
+final.data$treatment <- as.factor(final.data$treatment)
+final.data$Group <- as.factor(final.data$Group)
+
+colnames(final.data)# Identify trait columns (all except metadata)
+trait_cols <- setdiff(colnames(final.data), c( "IDs", "treatment" , "Group"  ))
+
+# Convert trait columns to numeric
+final.data[trait_cols] <- lapply(final.data[trait_cols], as.numeric)
+
+# Pivot the data longer for normality tests
+data_long <- final.data %>%
+  pivot_longer(cols = all_of(trait_cols), names_to = "Trait", values_to = "Value")
+
+# Shapiro-Wilk normality test for each Trait × treatment × Groups
+normality_results <- data_long %>%
+  group_by(Trait, treatment, Group) %>%
+  summarise(
+    p_value = tryCatch(shapiro.test(Value)$p.value, error = function(e) NA),
+    .groups = "drop"
+  ) %>%
+  mutate(Normal = ifelse(p_value > 0.05, "Yes", "No"))
+
+
+print("Normality Test Results:")
+print(normality_results)
+
+# Levene's test for homogeneity of variance for each trait
+levene_results <- map_df(trait_cols, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  test_result <- tryCatch(leveneTest(formula, data = final.data), error = function(e) NULL)
+
+  if (!is.null(test_result)) {
+    p_val <- test_result[1, "Pr(>F)"]
+    tibble(
+      Trait = trait,
+      p_value = p_val,
+      Homogeneous = ifelse(p_val > 0.05, "Yes", "No")
+    )
+  } else {
+    tibble(
+      Trait = trait,
+      p_value = NA,
+      Homogeneous = "Error"
+    )
+  }
+})
+
+
+print("Levene’s Test Results:")
+print(levene_results)
+
+#write.table(levene_results, "levenTest_ variance_homogenity_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+#write.table(normality_results, "Normality_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+# CHOICE OF ANALYSIS METHOD
+# Based on normality + variance + interaction
+
+# Suggestion logic:
+# - If most groups are normal and variances are homogeneous => use 2-way ANOVA
+# - If normality or variance assumptions are violated but you need interaction => use ART ANOVA or GLM
+# - If data is hierarchical or repeated (e.g. same genotype across replicates) => consider LMM
+
+# Example model using 2-way ANOVA (if assumptions OK)
+# anova_result <- aov(Biomass ~ treatment * Groups, data = data)
+# summary(anova_result)
+
+# Example model using ART ANOVA (if assumptions violated)
+# library(ARTool)
+# art_model <- art(Biomass ~ treatment * Groups, data = data)
+# anova(art_model)
+
+# Example LMM (if repeated measures or random effects like genotype)
+# lmm_model <- lmer(Biomass ~ treatment * Groups + (1|genotype), data = data)
+# summary(lmm_model)
+
+```
+## checke the value for the skewness of each trait
+
+```{r}
+library(e1071)
+numeric_cols <- sapply(final.data, is.numeric)
+skewness_values <- sapply(final.data[, numeric_cols], skewness, na.rm = TRUE)
+print(skewness_values)
+
+
+
+#Interpretation:
+
+#Skewness > 0.5 indicates moderate to high positive skew, and log transformation can help.
+
+#If skewness is around 0 (between -0.5 and 0.5), the data is approximately symmetric.
+
+#Skewness < -0.5 suggests negative skew.
+```
+
+
+
+#check the dispersion:
+## For count data: Use family = poisson(link = "log"). 
+##If we have overdispersion,family = negative.binomial or check if you need a zero-inflated model.
+##For binary data: Use family = binomial(link = "logit").
+
+```{r}
+traits<- c("max.Height", "Biomass", "Shoots", "Shoots_with_ear","Shoots_without_ear" ,"Nr_ears" ,           "Full_ear","Half_ear", "Weight_ear", "Nr_seeds", "Mature_seeds","Poor_seeds", "all.seeds.weight" , 
+"TKW")
+
+
+means <- sapply(final.data[traits], mean, na.rm = TRUE)
+vars <- sapply(final.data[traits], var, na.rm = TRUE)
+
+data.frame(Trait = traits, Mean = means, Variance = vars)
+
+
+
+
+check_overdispersion <- function(response, data) {
+  formula <- as.formula(paste(response, "~ 1"))  # Null model for dispersion test
+  model <- glm(formula, family = poisson, data = data)
+  dispersion <- sum(residuals(model, type = "pearson")^2) / df.residual(model)
+  return(dispersion)
+}
+
+dispersion_values <- sapply(traits, check_overdispersion, data = final.data)
+
+dipersion <-data.frame(Trait = traits, Dispersion = dispersion_values)
+
+
+
+
+
+```
+
+
+# now we can apply GLM for the continouse variables (traits) except MAX .height (for this we use ANOVA, its normal and homogenized)
+```{r}
+trait_cols <-  c("Biomass", "TKW", "Weight_ear")
+
+# Run GLM for each trait (with Gamma family for non-normal data)
+glm_results <- map_df(trait_cols, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  tryCatch({
+    # Fit GLM model with Gamma family
+    glm_model <- glm(formula, data = final.data, family = Gamma(link = "log"))
+    
+    # Summary of the GLM model
+    glm_summary <- summary(glm_model)
+    
+    # Extract the ANOVA table for the GLM model
+    glm_aov <- anova(glm_model, test = "Chisq")
+    
+    tibble(
+      Trait = trait,
+      Term = rownames(glm_aov),
+      p_value = glm_aov$`Pr(>Chi)`,
+      Estimate = glm_summary$coefficients[, "Estimate"],  # Get the estimates (coefficients)
+      Std_Error = glm_summary$coefficients[, "Std. Error"]  # Get the standard errors
+    )
+  }, error = function(e) {
+    tibble(
+      Trait = trait,
+      Term = NA,
+      p_value = NA,
+      Estimate = NA,
+      Std_Error = NA
+    )
+  })
+})
+
+# Print GLM Results
+print("GLM Results:")
+print(glm_results)
+
+# Add stars to your GLM results for significance
+get_sig_stars <- function(p) {
+  if (is.na(p)) return("")
+  else if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else return("ns")
+}
+
+# Add significance stars to GLM results
+glm_results <- glm_results %>%
+  mutate(Significance = sapply(p_value, get_sig_stars))
+
+# View updated GLM table
+print(glm_results)
+
+#write.table(glm_results,"glm_results-continous variables.csv", sep=",", col.names = TRUE, row.names = FALSE)
+```
+##repeating for one single trait (significant one) to be followed up by TUKEY test
+```{r}
+glm_model <- glm(TKW ~ treatment*Group, data = final.data, family = Gamma(link = "log"))
+glm_aov <- anova(glm_model)
+glm_aov
+tab_model(glm_aov)
+
+final.data$Group_Treatment <- interaction(final.data$Group, final.data$treatment)
+head(final.data)
+
+# Refit model with new factor
+glm_model2 <- glm(TKW ~ Group_Treatment , data = final.data, family = Gamma(link = "log"))
+glm_model2
+# Run emmeans and cld on that
+
+emm_combined <- emmeans(glm_model2, ~ Group_Treatment)
+
+# Tukey post hoc with proper letters
+tukey_result <- cld(emm_combined, adjust = "tukey", Letters = letters)
+
+# View and use result
+print(tukey_result)
+ #write.table(tukey_result, "leaf_angle_tukey_result.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+
+summary_data<- group_by(final.data, treatment, Group) %>%
+summarise(mean=mean(TKW), sd=sd(TKW)) %>%
+arrange(desc(mean))
+View(summary_data)
+
+
+summary_data$tukey<- tukey_result$.group
+summary_data
+
+png(file = paste(wd, "TKW_GLM_gamma.png", sep='/'),width=10,height=7,units="in",res=1200)
+ggplot(final.data, aes(x=treatment, y=TKW, fill=Group) ) +
+  
+    geom_boxplot(outlier.shape = NA) + 
+   geom_jitter(color = "black", size = 0.4, alpha = 0.8,
+                position = position_jitterdodge(jitter.width = 0.25, dodge.width = 0.75)) +# Boxplot without outlier points
+  #geom_jitter(color="black", size=0.4, alpha=0.9) + # Add jittered points
+ scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+geom_text(data = summary_data, aes(x = treatment, y = mean, label = tukey),
+              position = position_dodge(0.8), vjust = -10.5, hjust = -1.25,
+              size = 5, colour = "orangered2",fontface = "bold") +
+   # scale_fill_brewer(palette = "Accent", labels = c("High iWUE", "Low iWUE")) +
+    
+    scale_fill_manual(values=c("deepskyblue4","cadetblue2","deepskyblue4","cadetblue2")) +
+    #scale_fill_brewer(palette = "Dark2")+
+#scale_fill_manual(values=c("turquoise4","maroon4","turquoise4","maroon4")) +
+
+
+theme(text = element_text(size = 18))+
+#ggtitle("Biomass difference for all lines")+
+theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position="top")+
+theme(axis.text.x = element_text(colour=c("black","black")),
+     axis.text.y= element_text(colour=c("black","black", "black","black")))+
+theme(text = element_text(size = 20))+
+   theme(axis.text.x =element_text(size = 20))+
+  theme(axis.text.y =element_text(size = 20))+
+   theme(legend.text = element_text(size = 18)) +
+#geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 4)+
+labs(x="Treatments", y="TKW [gr]")
+dev.off()
+
+
+
+
+
+
+png(file = paste(wd, "TKW_GLM_gamma2.png", sep='/'),width=10,height=7,units="in",res=1200)
+ggplot(final.data, aes(x=treatment, y=TKW, fill=Group) ) +
+  
+    geom_boxplot(outlier.shape = NA) + 
+   #geom_jitter(color = "black", size = 0.4, alpha = 0.8,
+                #position = position_jitterdodge(jitter.width = 0.25, dodge.width = 0.75)) +# Boxplot without outlier points
+  #geom_jitter(color="black", size=0.4, alpha=0.9) + # Add jittered points
+ scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+geom_text(data = summary_data, aes(x = treatment, y = mean, label = tukey),
+              position = position_dodge(0.8), vjust = -10.5, hjust = -1.25,
+              size = 5, colour = "orangered2",fontface = "bold") +
+   # scale_fill_brewer(palette = "Accent", labels = c("High iWUE", "Low iWUE")) +
+    
+    scale_fill_manual(values=c("deepskyblue4","cadetblue2","deepskyblue4","cadetblue2")) +
+    #scale_fill_brewer(palette = "Dark2")+
+#scale_fill_manual(values=c("turquoise4","maroon4","turquoise4","maroon4")) +
+ labs(fill = "Groups", x = "Treatments", y ="TKW [gr]") +
+    theme_bw() +
+    theme(text = element_text(size = 18),
+          axis.text = element_text(color = "black", size = 18),
+          legend.position = "top",
+          legend.text = element_text(size = 16),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+
+
+dev.off()
+```
+
+
+# save GLM result as a clean and tidy table (to use for the paper or final presentation)
+
+```{r}
+
+
+# Read your ART ANOVA results
+glm_data <- read_csv("glm_results-continous variables.csv")
+
+# Optional: Clean column names (if needed)
+names(glm_data)
+
+# Create a new column combining significance stars and p-values
+glm_data <- glm_data %>%
+  mutate(Sig_with_p = paste0(Significance, " (p = ", `p_value`, ")"))
+
+# Pivot the data: rows = Terms, columns = Traits, values = Sig_with_p
+summary_table <- glm_data %>%
+  select(Term, Trait, Sig_with_p) %>%
+  pivot_wider(names_from = Trait, values_from = Sig_with_p) %>%
+  arrange(match(Term, c("treatment", "Groups", "treatment:Groups")))
+
+# View the final table
+print(summary_table)
+
+# Optional: Write to CSV
+write_csv(summary_table, "GLM_continouse_gamma_summary_table.csv")
+
+
+```
+
+## for the rest of the traits (discrete ones) GLM (quasipoisson() districution) is considered
+
+    
+```{r}
+
+selected_traits <- c( "Shoots_with_ear","Shoots_without_ear", "Nr_ears", "Full_ear", "Half_ear"  )  # just the traits you want to run ART ANOVA on
+
+
+glm_results2<- map_df(selected_traits, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  tryCatch({
+    glm_model2 <- glm(formula, data = final.data, family = quasipoisson())  
+    glm_anova2 <- anova(glm_model2, test = "F")  # 
+    tibble(
+      Trait = trait,
+      Term = rownames(glm_anova2),
+      p_value = glm_anova2$`Pr(>F)`
+    )
+  }, error = function(e) {
+    tibble(
+      Trait = trait,
+      Term = NA,
+      p_value = NA
+    )
+  })
+})
+
+print("GLM Results:")
+print(glm_results2)
+
+get_sig_stars <- function(p) {
+  if (is.na(p)) return("")
+  else if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else if (p > 0.05) return("ns")
+  else return("")
+}
+
+
+# Add stars to your ART ANOVA table
+glm_results2 <- glm_results2 %>%
+  mutate(Significance = sapply(p_value, get_sig_stars))
+
+# View updated table
+print(glm_results2)
+write.table(glm_results2, "GLM_results_discrete_quasipoisson_variables.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+```
+
+
+
+### negative binomial for the other traits due to the very high dispersion value
+
+```{r}
+# Load the MASS package for glm.nb
+library(MASS)
+
+# Define the selected traits you want to apply GLM.nb to
+selected_traits <- c("Nr_seeds", "Mature_seeds", "Poor_seeds")
+
+# Create an empty list to store results
+glm_results2 <- map_df(selected_traits, function(trait) {
+  
+  # Create the formula for the model
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  
+  tryCatch({
+    # Use glm.nb() for Negative Binomial for count data (e.g., seeds)
+    glm_model2 <- glm.nb(formula, data = final.data)
+    
+    # Perform ANOVA to test the model
+    glm_anova2 <- anova(glm_model2, test = "Chisq")  # Use Chisq test for GLM
+    tibble(
+      Trait = trait,
+      Term = rownames(glm_anova2),
+      p_value = glm_anova2$`Pr(>Chi)`  # Use `Pr(>Chi)` for chi-squared test
+    )
+  }, error = function(e) {
+    tibble(
+      Trait = trait,
+      Term = NA,
+      p_value = NA
+    )
+  })
+})
+
+# Print GLM Results
+print("GLM Results:")
+print(glm_results2)
+
+# Function to get significance stars
+get_sig_stars <- function(p) {
+  if (is.na(p)) return("")
+  else if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else if (p > 0.05) return("ns")
+  else return("")
+}
+
+# Add stars to your results table
+glm_results2 <- glm_results2 %>%
+  mutate(Significance = sapply(p_value, get_sig_stars))
+
+# View updated table
+print(glm_results2)
+
+# Save the results to a CSV file
+write.table(glm_results2, "GLM_results_discrete_nb_variables.csv", sep = ",", row.names = FALSE, col.names = TRUE)
+
+```
+
+
+## GLM for Shoots using Poisson family 
+```{r}
+Shoots_glm <- glm(Shoots~ treatment * Group, data=final.data, family = poisson())
+ 
+shoot_glm<- aov(Shoots_glm)
+summary(shoot_glm)
+tab_model(shoot_glm)
+
+shoot_glm_summary <- summary(shoot_glm)
+# Save the coefficients part
+coefficients_table <- as.data.frame(shoot_glm_summary[[1]])
+
+write.table(coefficients_table, "Shoot_results_poisson.csv", sep=",", col.names = NA)
+
+tab_model(shoot_glm, file = "shoot_glm_results.html")
+
+
+### second option
+
+
+library(broom)
+
+shoot_glm_tidy <- tidy(shoot_glm)
+write.table(shoot_glm_tidy, "Shoot_results_poisson2.csv", sep=",", row.names = FALSE)
+```
+
+
+
+
+
+### MAX.Height analysis using normal ANOVA (follows normality and variance homogenity)
+
+
+```{r}
+max.Height_AN <- aov(max.Height~ treatment * Group, data=final.data)
+summary(max.Height_AN)
+tab_model(max.Height_AN)
+tab_model(max.Height_AN, file = "max.Height_glm_results.html")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
