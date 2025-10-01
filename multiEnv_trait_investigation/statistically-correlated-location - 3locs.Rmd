@@ -1,0 +1,794 @@
+---
+title: "locations-correlation-statistically-all locations"
+author: "sepideh.Jafarian"
+date: "2025-08-05"
+output: 
+  rmarkdown::html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: inline
+   root.dir: "C:/Users/SepidehJafarian/Desktop/locations-correlation-statistically"
+---
+
+
+```{r setup, include=TRUE}
+set.seed(223)
+wd= "C:/Users/SepidehJafarian/Desktop/locations-correlation-statistically"
+```
+
+## Read in the two files
+
+```{r}
+margenrot <- read.csv("MR19_means.csv")
+hadmersleben <- read.csv("hadms19_means-final.csv")
+sollingen <- read.csv("sol21_means.csv", sep=";", header = TRUE)
+
+
+colnames(hadmersleben)[1]<- "Genotypes"
+colnames(hadmersleben)[2]<- "CIC"
+
+colnames(sollingen)[1]<- "Genotypes"
+colnames(sollingen)[2]<- "CIC"
+```
+
+## Rename the CIC columns
+
+```{r}
+colnames(margenrot)[colnames(margenrot) == "CIC"] <- "CIC_Morgenrot"
+colnames(hadmersleben)[colnames(hadmersleben) == "CIC"] <- "CIC_Hadmersleben"
+colnames(sollingen)[colnames(sollingen) == "CIC"] <- "CIC_Sollingen"
+
+```
+
+##Merge the data by genotype
+
+```{r}
+merged_data <- merge(margenrot, hadmersleben, by = "Genotypes")
+str(merged_data)
+
+merged_data<- merge (merged_data, sollingen, by="Genotypes")
+View(merged_data)
+# Convert CIC columns to numeric (in case they were read as factors or characters)
+merged_data$CIC_Morgenrot <- as.numeric(as.character(merged_data$CIC_Morgenrot))
+merged_data$CIC_Hadmersleben <- as.numeric(as.character(merged_data$CIC_Hadmersleben))
+
+#write.table(merged_data, "merged_3locs.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+lines=c("Julius", "Format", "Event", "Bussard", "Potenzial","BAYP4535", "Reform","Firl3565", "Reform", "Ambition")
+
+merged_data<-merged_data[!merged_data$Genotypes %in% lines, ]
+
+```
+
+
+## Calculation of the correlation (Pearson correlation)
+##### R is a measure of the strength and direction of the relationship.
+###### 1. Pairwise correlations (one by one)
+ 
+
+```{r}
+
+
+
+cor(merged_data$CIC_Morgenrot, merged_data$CIC_Hadmersleben, use="pairwise.complete.obs", method="pearson")
+cor(merged_data$CIC_Morgenrot, merged_data$CIC_Sollingen, use="pairwise.complete.obs", method="pearson")
+cor(merged_data$CIC_Hadmersleben, merged_data$CIC_Sollingen, use="pairwise.complete.obs", method="pearson")
+
+
+```
+🔹 2. All at once (correlation matrix)
+```{r}
+
+# Select only the 3 trait columns
+traits <- merged_data[ , c("CIC_Morgenrot","CIC_Hadmersleben","CIC_Sollingen")]
+
+# Correlation matrix
+cor_mat <- cor(traits, use="pairwise.complete.obs", method="pearson")
+print(cor_mat)
+
+write.csv(cor_mat, "correlation_summary_3locs.csv", row.names = TRUE)
+
+```
+
+
+
+
+
+```{r}
+
+colnames(merged_data)<- sub("^CIC_", "", colnames(merged_data))
+colnames(merged_data)<- sub("_", "", colnames(merged_data))
+
+
+
+traits <- merged_data[ , c("Morgenrot","Hadmersleben","Sollingen")]
+
+# Correlation matrix
+cor_mat <- cor(traits, use="pairwise.complete.obs", method="pearson")
+print(cor_mat)
+
+library(corrplot)
+
+
+png(file = paste(wd, "full_cor_all_locs.png", sep='/'),width=7,height=7,units="in",res=1200)
+corrplot(cor_mat, method="color", type="upper", addCoef.col="black",
+         tl.col="black", tl.srt=45,
+
+  mar=c(0,0,2,0)) 
+ title(main = expression("Correlation of " * delta^13*C~("\u2030")~" Across Locations"))
+dev.off()
+```
+
+
+```{r}
+extreme_lines <- c("BMW2218","BMW2267","BMW2364","BMW2496","BMW2007","BMW2156","BMW2352","BMW2321","BMW2297","BMW2095")  # replace with your actual genotype names
+
+```
+
+
+
+
+
+
+####Reshape data to long format
+We want one column for location, one column for CIC value, and then mark which points are extreme.
+
+```{r}
+library(dplyr)
+library(tidyr)
+merged_data <- merge(margenrot, hadmersleben, by = "Genotypes")
+str(merged_data)
+
+merged_data<- merge (merged_data, sollingen, by="Genotypes")
+View(merged_data)
+# Convert CIC columns to numeric (in case they were read as factors or characters)
+merged_data$CIC_Morgenrot <- as.numeric(as.character(merged_data$CIC_Morgenrot))
+merged_data$CIC_Hadmersleben <- as.numeric(as.character(merged_data$CIC_Hadmersleben))
+
+lines=c("Julius", "Format", "Event", "Bussard", "Potenzial","BAYP4535", "Reform","Firl3565", "Reform", "Ambition")
+
+merged_data<-merged_data[!merged_data$Genotypes %in% lines, ]
+
+df_long <- merged_data %>%
+  pivot_longer(
+    cols = c(CIC_Morgenrot, CIC_Hadmersleben, CIC_Sollingen), 
+    names_to = "Location", 
+    values_to = "CIC"
+  ) %>%
+  mutate(
+    Location = case_when(
+      Location == "CIC_Morgenrot" ~ "Morgenrot",
+      Location == "CIC_Hadmersleben" ~ "Hadmersleben",
+      Location == "CIC_Sollingen" ~ "Sollingen"
+    ),
+         Group = ifelse(Genotypes %in% extreme_lines, "Extreme", "Normal"))
+
+```
+
+
+
+
+####Add percentage annotations for selection window sizes
+
+```{r}
+
+
+library(ggplot2)
+max_CIC <- max(df_long$CIC, na.rm = TRUE)
+png(file = paste(wd, "tail-percentage-all3-locations.png", sep='/'),width=9,height=8,units="in",res=1200)
+
+df_long$Location <- factor(df_long$Location, levels = c("Morgenrot", "Hadmersleben", "Sollingen"))
+
+ggplot(df_long, aes(x = Location, y = CIC)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Group), width = 0.2, alpha = 0.7, size = 2) +
+  scale_color_manual(values = c("Extreme" = "red", "Normal" = "grey80")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(vjust = 0.5, color = "black", size = 10),
+        panel.grid.major = element_blank(),  # remove major grid lines
+    panel.grid.minor = element_blank(),
+         plot.title = element_text(size = 11, hjust=0.5)) +
+  labs(
+    title = "Distribution of δ13C across all locations" ,
+    x="",
+    y = expression(delta^{13}*C~("\u2030")~"across locations"),
+    color = "Genotype Groups")
+  # ) +
+  #  annotate("text", x = 1, y = max_CIC + 0.5, label = "31.33% per tails (62.66% overall)", size = 4) +
+  # annotate("text", x = 2, y = max_CIC + 0.5, label = "6.35% per tails (12.70% overall)", size = 4) +
+  # 
+  # ## to have them as arrow shape:
+#annotate("segment", x = 0.7, xend = 1.3, y = max_CIC + 0.3, yend = max_CIC + 0.3,
+         #arrow = arrow(ends = "both", length = unit(0.2, "cm")) ) +
+
+#annotate("segment", x = 1.7, xend = 2.3, y = max_CIC + 0.3, yend = max_CIC + 0.3,
+         #arrow = arrow(ends = "both", length = unit(0.2, "cm")) )
+  
+  
+# annotate("segment", x = 0.7, xend = 1.3, y = max_CIC + 0.3, yend = max_CIC + 0.3) +
+# annotate("segment", x = 1.7, xend = 2.3, y = max_CIC + 0.3, yend = max_CIC + 0.3)
+dev.off()
+
+
+```
+
+
+
+####-------------------------------------------------------------------------------------------
+####---------------------------------------------------------------------------------------------
+## Calculation of Mean , Variance and SD of the trait for both Locations to see the distribution of CIC within Pop.
+
+```{r}
+
+# Means
+mean_morgenrot <- mean(merged_data$CIC_Morgenrot, na.rm = TRUE)
+mean_hadmersleben <- mean(merged_data$CIC_Hadmersleben, na.rm = TRUE)
+mean_sollingen <- mean(merged_data$CIC_Sollingen, na.rm = TRUE)
+
+# Standard Deviations
+sd_morgenrot <- sd(merged_data$CIC_Morgenrot, na.rm = TRUE)
+sd_hadmersleben <- sd(merged_data$CIC_Hadmersleben, na.rm = TRUE)
+sd_sollingen <- sd(merged_data$CIC_Sollingen, na.rm = TRUE)
+
+# Variances
+var_morgenrot <- var(merged_data$CIC_Morgenrot, na.rm = TRUE)
+var_hadmersleben <- var(merged_data$CIC_Hadmersleben, na.rm = TRUE)
+var_sollingen <- var(merged_data$CIC_Sollingen, na.rm = TRUE)
+```
+
+
+```{r}
+
+# Combine results into a summary table
+summary_table <- data.frame(
+  Location = c("Morgenrot", "Hadmersleben", "Sollingen"),
+  Mean = c(mean_morgenrot, mean_hadmersleben, mean_sollingen),
+  SD = c(sd_morgenrot, sd_hadmersleben, sd_sollingen),
+  Variance = c(var_morgenrot, var_hadmersleben, var_sollingen)
+)
+
+summary_table
+write.table(summary_table, "statistics_summary_3loc.csv", sep=",", row.names = FALSE, col.names = TRUE)
+```
+
+### Reshape data for plotting
+
+```{r}
+library(tidyr)
+library(ggplot2)
+
+# Reshape to long format
+long_data <- merged_data %>%
+  pivot_longer(
+    cols = c(CIC_Morgenrot, CIC_Hadmersleben, CIC_Sollingen),
+    names_to = "Location",
+    values_to = "CIC"
+  )
+
+```
+
+###remove CIC from the locations name
+```{r}
+long_data$Location <- gsub("CIC_", "", long_data$Location)
+```
+
+
+```{r}
+library(tidyr)
+library(ggplot2)
+library(patchwork)
+
+
+#png(file = paste(wd, "CIC_dist_3locs_scaled.png", sep='/'), width=15, height=18, units="in", res=1200)
+png(file = paste(wd, "CIC_dist_3locs_scaled2.png", sep='/'), width=15, height=9, units="in", res=1200)
+# Histogram for Morgenrot
+hist_morgenrot <- ggplot(
+  subset(long_data, Location == "Morgenrot"), 
+  aes(x = CIC)
+) +
+  geom_histogram(bins = 20, fill = "#F4A300", color = "black", alpha = 0.7) +
+    scale_x_continuous(
+  limits = c(-26.8, -24.8),
+  breaks = seq(-26.8, -24.8, by = 0.5)
+)+
+  geom_vline(xintercept = -25.88, color = "blue", linetype = "dashed", size = 1)+
+  theme_minimal() +
+  labs(title = "Morgenrot (2019)",
+       x = expression(paste(delta^{13}, "C (","\u2030",")")),
+       y = "Count")+
+   theme_minimal(base_size = 10) +
+  theme(
+    axis.text.x = element_text(vjust = 0.5, color = "black", size = 11),
+    axis.title.x = element_text(size = 11),
+    axis.title.y = element_text(size = 11),
+    plot.title = element_text(hjust=0.5, face = "bold")
+  # Remove minor grid lines
+  #  strip.text = element_text(size = 11),
+
+  ) 
+
+
+# Histogram for Hadmersleben
+hist_hadmersleben <- ggplot(
+  subset(long_data, Location == "Hadmersleben"), 
+  aes(x = CIC)
+) +
+  geom_histogram(bins =20, fill = "#1B9E77", color = "black", alpha = 0.7) +
+#       scale_x_continuous(
+#   limits = c(-28.7, -26),
+#   breaks = seq(-28.7, -26, by = 0.5)
+# )+
+
+  theme_minimal() +
+  labs(title = "Hadmersleben(2020)",
+       x =expression(paste(delta^{13}, "C (","\u2030",")")),
+       y = "Count")+
+    geom_vline(xintercept = -27.49, color = "blue", linetype = "dashed", size = 1)+
+
+   theme_minimal(base_size = 10) +
+  theme(
+    axis.text.x = element_text(vjust = 0.5, color = "black", size = 11),
+    axis.title.x = element_text(size = 11),
+    axis.title.y = element_text(size = 11),
+    plot.title = element_text(hjust=0.5, face = "bold")
+  # Remove minor grid lines
+   # strip.text = element_text(size = 11),
+
+  ) 
+
+
+
+
+# Histogram for Hadmersleben
+hist_sollingen<- ggplot(
+  subset(long_data, Location == "Sollingen"), 
+  aes(x = CIC)
+) +
+  geom_histogram(bins =20, fill = "#FF99CC", color = "black", alpha = 0.7) +
+#       scale_x_continuous(
+#   limits = c(-28.7, -26),
+#   breaks = seq(-28.7, -26, by = 0.5)
+# )+
+
+  theme_minimal() +
+  labs(title = "Sollingen(2021)",
+       x =expression(paste(delta^{13}, "C (","\u2030",")")),
+       y = "Count")+
+    geom_vline(xintercept = -28.52, color = "blue", linetype = "dashed", size = 1)+
+
+   theme_minimal(base_size = 10) +
+  theme(
+    axis.text.x = element_text(vjust = 0.5, color = "black", size = 11),
+    axis.title.x = element_text(size = 11),
+    axis.title.y = element_text(size = 11),
+    plot.title = element_text(hjust=0.5, face = "bold")
+  # Remove minor grid lines
+   # strip.text = element_text(size = 11),
+
+  ) 
+
+
+
+
+#hist_morgenrot / hist_hadmersleben/ hist_sollingen
+hist_morgenrot + hist_hadmersleben/ hist_sollingen
+dev.off()
+```
+
+
+
+```{r}
+anova_model <- aov(CIC~ Location, data = df_long)
+
+# View results
+summary(anova_model)
+
+
+TukeyHSD(anova_model)
+library(emmeans)
+
+emmeans(anova_model, pairwise ~ Location)
+ anova_results
+
+ 
+ 
+ 
+ anova_summary <- summary(anova_model)[[1]]
+anova_results <- as.data.frame(anova_summary)
+
+# Rename column for clarity
+colnames(anova_results)[which(names(anova_results) == "Pr(>F)")] <- "p.value"
+
+# Replace tiny p-values with "<2e-16"
+anova_results$p.value <- ifelse(
+  is.na(anova_results$p.value), 
+  NA, 
+  ifelse(anova_results$p.value < 2e-16, "<2e-16", anova_results$p.value)
+)
+
+anova_results
+
+write.table(anova_results, "final_correct_anova_3locs_real_Pvalue.csv", sep=",")
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(multcompView)
+
+# 1️⃣ Ensure Location is a factor in your preferred order
+df_long <- df_long %>%
+  mutate(Location = factor(Location, levels = c("Morgenrot", "Hadmersleben", "Sollingen")))
+
+# 2️⃣ One-way ANOVA
+anova_model <- aov(CIC ~ Location, data = df_long)
+summary(anova_model)
+
+# 3️⃣ Tukey HSD for pairwise comparisons
+tukey <- TukeyHSD(anova_model)
+
+# 4️⃣ Extract significance letters for plotting
+tukey_cld <- multcompLetters4(anova_model, tukey)
+letters_df <- data.frame(
+  Location = names(tukey_cld$Location$Letters),
+  Letters = tukey_cld$Location$Letters,
+  stringsAsFactors = FALSE
+)
+
+# 5️⃣ Determine y-position for letters (slightly above max)
+max_CIC <- max(df_long$CIC, na.rm = TRUE)
+letters_df$ypos <- max_CIC + 0.2  # adjust if needed
+
+# 6️⃣ Plot boxplot with jitter and significance letters
+png(file = paste(wd, "Mean_comparison_all_locs.png", sep='/'), width=12, height=9, units="in", res=1200)
+ggplot(df_long, aes(x = Location, y = CIC)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Group), width = 0.2, alpha = 0.7, size = 2) +
+  scale_color_manual(values = c("Extreme" = "red", "Normal" = "grey80")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(vjust = 0.5, color = "black", size = 10),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(size = 11, hjust = 0.5)
+  ) +
+  labs(
+    title = "Distribution of δ13C across all locations",
+    x = "",
+    y = expression(delta^{13}*C~("\u2030")~"across locations"),
+    color = "Genotype Groups"
+  ) +
+  geom_text(
+    data = letters_df,
+    aes(x = Location, y = ypos, label = Letters),
+    inherit.aes = FALSE,
+    size = 7,
+    color= "black",
+      fontface = "bold"
+  )
+dev.off()
+```
+
+
+
+```{r}
+M<- shapiro.test(merged_data$CIC_Morgenrot)
+M
+
+H<- shapiro.test(merged_data$CIC_Hadmersleben)
+H
+
+N<- shapiro.test(merged_data$CIC_Sollingen)
+N
+
+
+shapiro_results <- data.frame(
+  Location = c("Morgenrot", "Hadmersleben", "Sollingen"),
+  W = c(M$statistic, H$statistic, N$statistic),
+  p_value = c(M$p.value, H$p.value, N$p.value)
+)
+
+# View
+shapiro_results
+
+write.table(shapiro_results, "shapiro_results_all_locs.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+```
+
+################-------------new graph sigmoed normalizes suggest (comparing lines within 2 locations)
+
+
+
+
+###############################highlighting the percentage of the tails in each location
+
+```{r}
+merged_data2<- read.csv("merged_3locs.csv", sep=",", header = TRUE)
+
+# Your extreme lines
+extreme_lines <- c("BMW2218","BMW2267","BMW2364","BMW2496","BMW2007",
+                   "BMW2156","BMW2352","BMW2321","BMW2297","BMW2095")  
+
+# Reshape to long format
+df_long2 <- merged_data2 %>%
+  pivot_longer(cols = c(CIC_Morgenrot, CIC_Hadmersleben, CIC_Sollingen), 
+               names_to = "Location", 
+               values_to = "CIC") %>%
+    mutate(
+    Location = case_when(
+      Location == "CIC_Morgenrot" ~ "Morgenrot",
+      Location == "CIC_Hadmersleben" ~ "Hadmersleben",
+      Location == "CIC_Sollingen" ~ "Sollingen"
+    ),
+     Location = factor(Location, levels = c("Morgenrot", "Hadmersleben", "Sollingen")),  # order facets
+    Group = ifelse(Genotypes %in% extreme_lines, "Extreme", "Normal")
+  )
+
+# Rank genotypes within each location
+df_rank2 <- df_long2 %>%
+  group_by(Location) %>%
+  arrange(CIC) %>%
+  mutate(Rank = row_number(),
+         Total = n()) %>%
+  ungroup()
+
+# Get the number of genotypes per location
+n_had <- sum(df_rank2$Location == "Hadmersleben")
+n_mor <- sum(df_rank2$Location == "Morgenrot")
+n_sol <- sum(df_rank2$Location == "Sollingen")
+
+# defining cuttoffs for the shodow but not for sollingen
+cutoffs <- data.frame(
+  Location = c("Hadmersleben", "Morgenrot", "Sollingen"),
+  lower_cut = c(ceiling(0.3132 * n_had), 25, NA),
+  upper_cut = c(n_had - ceiling(0.3132 * n_had) + 1, n_mor - 25 + 1, NA),
+  label     = c("31.32% per tail", "6.35% per tail", ""),
+  n         = c(n_had, n_mor, n_sol)
+)
+
+
+
+
+```
+
+
+
+###just ordering the locations
+```{r}
+# desired order
+my_order <- c("Morgenrot", "Hadmersleben", "Sollingen")
+
+# clean & set factor levels in every DF that you use in the plot
+df_long2 <- df_long2 %>%
+  mutate(Location = trimws(as.character(Location)),                # remove stray spaces
+         Location = factor(Location, levels = my_order))
+
+df_rank2 <- df_rank2 %>%
+  mutate(Location = trimws(as.character(Location)),
+         Location = factor(Location, levels = my_order))
+
+cutoffs <- cutoffs %>%
+  mutate(Location = trimws(as.character(Location)),
+         Location = factor(Location, levels = my_order))
+
+# quick sanity checks
+print(unique(df_rank2$Location))
+print(levels(df_rank2$Location))
+print(unique(cutoffs$Location))
+print(levels(cutoffs$Location))
+```
+
+
+```{r}
+
+
+# Plot
+png(file = paste(wd, "scattertail-percentage-all-locations.png", sep='/'), width=14, height=8, units="in", res=1200)
+
+ggplot(df_rank2, aes(x = Rank, y = CIC)) +
+  # Plot normal points first
+  geom_point(data = subset(df_rank2, Group == "Normal"), aes(color = Group), size = 0.5, alpha = 0.8) +
+  # Plot extreme points on top
+  geom_point(data = subset(df_rank2, Group == "Extreme"), aes(color = Group), size = 1, alpha = 1) +
+  # Shaded areas for tails
+  geom_rect(
+    data = cutoffs,
+    aes(xmin = 0.5, xmax = lower_cut + 0.5, ymin = -Inf, ymax = Inf),
+    fill = "#FF99FF", alpha = 0.2, inherit.aes = FALSE
+  ) +
+  geom_rect(
+    data = cutoffs,
+    aes(xmin = upper_cut - 0.5, xmax = n + 0.5, ymin = -Inf, ymax = Inf),
+    fill = "#FF99FF", alpha = 0.2, inherit.aes = FALSE
+  ) +
+  # geom_rect(
+  #   data = cutoffs,
+  #   aes(xmin = upper_cut - 0.5, xmax = n + 0.5, ymin = -Inf, ymax = Inf),
+  #   fill = "#FF99FF", alpha = 0.2, inherit.aes = FALSE
+  # ) +
+
+
+  facet_wrap(~Location, scales = "free_x") +
+  scale_color_manual(values = c("Extreme" = "red3", "Normal" = "grey80")) +
+  labs(
+   # title = expression(delta^{13}*C~ "distribution per location"),
+    x =  expression(paste("Genotypes sorted by ", delta^{13}, "C(‰)")),
+    y = expression(delta^{13}*C~("\u2030")~"for the populations"),
+    color = "Group"
+  ) +
+  
+ theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(vjust = 0.5, color = "black", size = 10),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+      panel.grid.major = element_blank(),   # Remove major grid lines
+  panel.grid.minor = element_blank(),   # Remove minor grid lines
+    strip.text = element_text(size = 12, face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  ) +
+  # Label above left tail
+geom_text(
+  data = cutoffs,
+  aes(
+     x = ifelse(Location == "Morgenrot", (n + upper_cut) / 2 -8, (n + upper_cut) / 2),
+    #x = ifelse(Location == "Morgenrot", lower_cut / 2 + 20, lower_cut / 2),
+    y = max(df_rank2$CIC, na.rm = TRUE) + 0.2,
+    label = label
+  ),
+  inherit.aes = FALSE, size = 3, color = "black"
+) +
+  
+  geom_text(
+  data = cutoffs,
+  aes(
+    x = ifelse(Location == "Morgenrot", lower_cut / 2 + 8, lower_cut / 2),
+    y = max(df_rank2$CIC, na.rm = TRUE) + 0.2,
+    label = label
+  ),
+  inherit.aes = FALSE, size = 3, color = "black"
+)
+
+dev.off()
+```
+
+```{r}
+
+
+# Plot
+png(file = paste(wd, "scattertail2-percentage-all-locations.png", sep='/'), width=14, height=8, units="in", res=1200)
+
+ggplot(df_rank2, aes(x = Rank, y = CIC)) +
+  # Plot normal points first
+  geom_point(data = subset(df_rank2, Group == "Normal"), aes(color = Group), size = 0.5, alpha = 0.8) +
+  # Plot extreme points on top
+  geom_point(data = subset(df_rank2, Group == "Extreme"), aes(color = Group), size = 1, alpha = 1) +
+  # Shaded areas for tails
+  geom_rect(
+    data = cutoffs,
+    aes(xmin = 0.5, xmax = lower_cut + 0.5, ymin = -Inf, ymax = Inf),
+    fill = "#006699", alpha = 0.2, inherit.aes = FALSE
+  ) +
+  geom_rect(
+    data = cutoffs,
+    aes(xmin = upper_cut - 0.5, xmax = n + 0.5, ymin = -Inf, ymax = Inf),
+    fill = "#006699", alpha = 0.2, inherit.aes = FALSE
+  ) +
+  geom_rect(
+  data = subset(cutoffs, Location == "Sollingen"),
+  aes(xmin = 0.5, xmax = n + 0.5, ymin = -Inf, ymax = Inf),
+  fill = "#006699", alpha = 0.2, inherit.aes = FALSE
+)+
+
+  facet_wrap(~Location, scales = "free_x") +
+  scale_color_manual(values = c("Extreme" = "red3", "Normal" = "grey80")) +
+  labs(
+   # title = expression(delta^{13}*C~ "distribution per location"),
+    x =  expression(paste("Genotypes sorted by ", delta^{13}, "C(‰)")),
+    y = expression(delta^{13}*C~("\u2030")~"for the populations"),
+    color = "Group"
+  ) +
+  
+ theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(vjust = 0.5, color = "black", size = 10),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+      panel.grid.major = element_blank(),   # Remove major grid lines
+  panel.grid.minor = element_blank(),   # Remove minor grid lines
+    strip.text = element_text(size = 12, face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  ) +
+  # Label above left tail
+geom_text(
+  data = cutoffs,
+  aes(
+     x = ifelse(Location == "Morgenrot", (n + upper_cut) / 2 -8, (n + upper_cut) / 2),
+    #x = ifelse(Location == "Morgenrot", lower_cut / 2 + 20, lower_cut / 2),
+    y = max(df_rank2$CIC, na.rm = TRUE) + 0.2,
+    label = label
+  ),
+  inherit.aes = FALSE, size = 3, color = "black"
+) +
+  
+  geom_text(
+  data = cutoffs,
+  aes(
+    x = ifelse(Location == "Morgenrot", lower_cut / 2 + 8, lower_cut / 2),
+    y = max(df_rank2$CIC, na.rm = TRUE) + 0.2,
+    label = label
+  ),
+  inherit.aes = FALSE, size = 3, color = "black"
+)
+
+dev.off()
+```
+
+
+
+# making the Multiple correlation (one variable explained by the other two) to have one value wich is the correlation between all 3 locations
+
+<!-- Interpretation: -->
+<!-- Intercept: -6.356 → baseline value when both predictors are 0 (mostly not -->
+<!-- biologically meaningful here). -->
+<!-- CIC_Hadmersleben coefficient: 0.398 → for each 1-unit increase in Hadmersleben, -->
+<!-- Morgenrot increases by 0.398 units, holding Sollingen constant. -->
+<!-- CIC_Sollingen coefficient: 0.300 → similar interpretation for Sollingen. -->
+<!-- Both predictors are highly significant (p < 0.001). -->
+<!-- 3️⃣ Model fit -->
+<!-- Multiple R-squared = 0.6213 → about 62% of the variation in Morgenrot is -->
+<!-- explained jointly by the other two locations. -->
+<!-- Adjusted R-squared = 0.6194 → similar, accounting for the number of predictors. -->
+<!-- Multiple correlation coefficient (R) = √0.6213 ≈ 0.788 → this is the overall -->
+<!-- correlation between Morgenrot and the combination of Hadmersleben + Sollingen. -->
+<!-- ✅ This is what you probably saw in your [1] 0.7882356. -->
+
+<!-- #Note: R² = 62% is the variance explained, while R = 0.788 is the correlation. -->
+<!-- Both are meaningful; usually the R (78%) is more intuitive to present in this -->
+<!-- context. -->
+```{r}
+model <- lm(CIC_Morgenrot ~ CIC_Hadmersleben + CIC_Sollingen, data = merged_data2)
+
+# Check the summary
+summary(model)
+
+# Multiple correlation coefficient
+R <- sqrt(summary(model)$r.squared)
+R
+
+```
+
+
+```{r}
+coef_table <- summary(model)$coefficients
+
+# View it
+coef_table
+write.csv(coef_table, "Multiple_correlation_lm_summary_coefficients.csv", row.names = TRUE)
+
+
+```
+
+```{r}
+library(broom)
+
+# Convert lm summary to a tidy table
+tidy_model <- tidy(model)
+glance_model <- glance(model)
+
+# Save coefficients
+write.csv(tidy_model, "lm_tidy_coefficients.csv", row.names = FALSE)
+
+# Save model-level statistics
+write.csv(glance_model, "lm_tidy_statistics.csv", row.names = FALSE)
+```
