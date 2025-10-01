@@ -1,0 +1,1175 @@
+---
+title: "phenospex-dropped-daily observation"
+author: "Sepideh"
+date: "2024-10-02"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  rmarkdown::html_document:
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    number_sections: yes
+editor_options:
+  chunk_output_type: inline
+  root.dir: "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenospex - dropped - second check-assumption"
+---
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(lme4)
+library(emmeans)
+library(ggplot2)
+library(agricolae)
+library(dplyr)
+library(multcompView)
+library(car)
+library(readr)
+library(ggpubr)
+library(tibble)
+library(lubridate)
+library(flextable)
+library(openxlsx)
+library(stringr)
+library(rstatix)
+library(GGally)
+set.seed(844)
+```
+
+```{r}
+getwd()
+wd ="C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenospex - dropped - second check-assumption/daily observation"
+
+```
+
+
+```{r cars}
+mydata<- read.table("cleaned_phenospex(allgeno)_data.csv")
+View(mydata)
+```
+
+
+
+
+```{r}
+mydata<- read.table("cleaned_phenospex(allgeno)_data.csv")
+View(mydata)
+mydata$genotype<- as.factor(mydata$genotype)
+mydata$treatment<- as.factor(mydata$treatment)
+colnames(mydata)
+length(unique(mydata$genotype))
+```
+
+```{r}
+unique(mydata$unit)
+length(unique(mydata$unit))
+logic = str_detect(mydata$unit, "128:1:1")
+mydata = mydata[!logic,]
+length(unique(mydata$unit))
+
+```
+
+```{r}
+logic = str_detect(mydata$unit, "223:1:1")
+mydata = mydata[!logic,]
+length(unique(mydata$unit))
+```
+
+```{r}
+logic = str_detect(mydata$unit, "220:1:1")
+mydata = mydata[!logic,]
+length(unique(mydata$unit))
+```
+
+```{r}
+
+head(mydata)
+mydata <- mydata[!(mydata$genotype %in% c("BMW_2156", "BMW_2267")), ]
+length(unique(mydata$genotype))
+unique(mydata$genotype)
+levels(mydata$genotype)
+mydata<- droplevels(mydata)
+mydata$timestamp<- as.character(mydata$timestamp)
+```
+
+
+# assigning new column (Groups)
+
+```{r}
+print(mydata)
+high_genotypes <- c("BMW_2218", "BMW_2007", "BMW_2364", "BMW_2496")
+mydata <- mydata %>%
+  mutate(Groups = ifelse(g_alias %in% high_genotypes, "High iWUE", "Low iWUE"))
+View(mydata)
+
+```
+
+
+# dividing timestamp column into separate ones (date and time)
+
+```{r}
+mydata<- mydata 
+ncols <- max(str_count(mydata$timestamp, " ")) + 1
+ncols
+mydata<-cbind(mydata, str_split_fixed(mydata$timestamp, " ", ncols))
+View(mydata)
+```
+
+
+
+```{r}
+names(mydata)[16]<- "date"
+names(mydata)[17]<- "time"
+names(mydata)[9]<- "LAn"
+names(mydata)[10]<- "LA"
+names(mydata)[11]<- "LAI"
+names(mydata)[12]<- "LAP"
+names(mydata)[13]<- "LIc"
+names(mydata)[14]<- "LPD"
+
+View(mydata)
+```
+
+
+
+```{r}
+UniGenotypes<- unique(mydata$genotype)
+UniGenotypes
+length(unique(mydata$unit))
+```
+
+# subseting the genotypes
+
+
+```{r}
+idx=1
+genotypes_table = list()
+for (i in UniGenotypes){
+genotypes_table[[idx]]<- subset(mydata, genotype==i)
+
+idx=idx+1
+
+}
+```
+
+
+
+```{r}
+genotypes_table
+```
+
+
+
+```{r}
+for (i in 1:8){
+    print(dim(genotypes_table[[i]]))
+    }
+```
+
+#Groupind data for Biomass mean as ardered, separation of control and stress groups and finding common dates in both (there are some dates which dose not exit for both) using is.element function
+then providing interaction plot for it to compare both situation per genotype
+
+```{r}
+tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(Biomass)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    table2Plot = rbind(controlDates[log1,], droughtDates[log2,])
+    plot.new()
+    frame()
+        
+    par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    options(repr.plot.width=40, repr.plot.height=20)
+    d.Biomass.2095<- interaction.plot(x.factor =table2Plot$date, trace.factor =table2Plot$treatment, 
+                 response = table2Plot$mean, fun =mean, 
+                 type = "l", legend = TRUE, main=paste("digital biomass trend for line ", table2Plot$genotype[1], "Iteration ", i),
+                 xlab = "", ylab="d.biomass [mm]", trace.label = "Treatments",
+                 pch=c(1,19), col = c("blue", "red"), lwd=3, las = 2, cex.axis = 2, cex.main = 2, cex.lab = 2)
+```
+
+#Checking both data set have the same length which shows we cought only common dates
+
+```{r}
+print(dim(controlDates[log1, ]))
+print(dim(droughtDates[log2, ]))
+```
+#intersect() function to check the common variables between two vectores < print(intersect(a,b))>
+setdiff() function is to reveal th not common elements for two data set or velist or vectores <setdiff(list.a, list.b)>
+
+
+```{r}
+
+#png(file = paste(wd, "daily.png", sep='/'),width=15,height=5,units="in",res=1200)
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(Biomass)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    table2Plot = rbind(controlDates[log1,], droughtDates[log2,])
+    #plot.new()
+    #frame()
+        
+    par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+  tempFigure= ggplot(table2Plot, aes(x=date, y=mean, color=treatment)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    ylim(0,7e+07)+
+   # theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Digital Biomass [mm3] trend for line",table2Plot$genotype[i]))+
+    geom_line(aes(group =treatment), size=3) +
+    scale_color_manual( values = c("navy","red"))+
+    ylab("Digital Biomass [mm3]")+
+    xlab("Dates")+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+             plot.background=element_rect(fill="#f7f7f7"),
+             # panel.grid.minor=element_blank(),
+             # panel.grid.major.y=element_blank(),
+             # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             # panel.border=element_blank())
+  
+   filename <- paste0("Digital_Biomass_Trend_", table2Plot$genotype[i], ".png")
+    ggsave(filename = filename, plot = tempFigure, path = wd, 
+           width = 20, height = 7, dpi = 300)
+    print(tempFigure)
+}
+dev.off()
+```
+# Providing the biomass difference per day for each line
+After taking common dates now we have to order them in each data set(control and stress), thats why we need to use idx to put the same dates besides
+
+```{r}
+diffList = list()
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(Biomass)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    controlDates = controlDates[log1,]
+    droughtDates = droughtDates[log2,]
+
+    idx = order(controlDates$date)  # orderin the dates  for control situation
+    controlDates = controlDates[idx, ]
+    idx = order(droughtDates$date)
+    droughtDates = droughtDates[idx, ]
+    
+    diffVals = controlDates$mean - droughtDates$mean
+    genotypes = controlDates$genotype
+    date = controlDates$date
+    temp = data.frame(genotypes, date, diffVals)
+    diffList[[i]] = temp
+}
+```
+
+
+
+
+```{r}
+
+diffList
+```
+
+
+
+
+```{r}
+for(i in 1:length(diffList)){
+    par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(diffList[[i]], aes(x=as.Date(date), y=diffVals)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 30)) +
+   # theme_bw()+
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Digital Biomass [mm3] trend for line",diffList[[i]]$genotype[1]))+
+    geom_line(aes(), size=4) +
+    ylab("Digital Biomass [mm3]")+
+    xlab("Dates")
+    
+    
+      #theme(plot.title = element_text(hjust=0.5, face="bold"),
+       #      plot.background=element_rect(fill="#f7f7f7"),
+             # panel.grid.minor=element_blank(),
+             # panel.grid.major.y=element_blank(),
+             # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+       #      legend.position="top")
+             # panel.border=element_blank())
+    print(tempFigure)
+}
+```
+
+
+#To get all ten graphs in one
+
+
+```{r}
+
+
+png(file = paste(wd, "D.biomass_boxplot.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("difference of Digital Biomass [mm3] trend"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("black", "yellow", "black", "yellow", "yellow", "yellow", "black", "black"))+
+    ylab("Digital Biomass difference [mm3]")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+```{r}
+
+
+png(file = paste(wd, "D.biomass_boxplot2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+par(mgp=c(1,2.5,0),mar=c(15,15,4,20)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("difference of Digital Biomass [mm3] trend"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("red", "blue", "green", "magenta", "yellow", "black", "orange", "grey"))+
+    ylab("Digital Biomass difference [mm3]")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+--------------------------------------------------------------------------------now only for drought condition
+
+
+
+
+```{r}
+diffList = list()
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(Biomass)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    controlDates = controlDates[log1,]
+    droughtDates = droughtDates[log2,]
+
+    idx = order(controlDates$date)  # orderin the dates  for control situation
+    controlDates = controlDates[idx, ]
+    idx = order(droughtDates$date)
+    droughtDates = droughtDates[idx, ]
+    
+    diffVals = droughtDates$mean
+    genotypes = droughtDates$genotype
+    date = droughtDates$date
+    temp = data.frame(genotypes, date, diffVals)
+    diffList[[i]] = temp
+}
+```
+
+
+
+
+```{r}
+
+
+png(file = paste(wd, "D.biomass_boxplot_only drought.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("difference of Digital Biomass [mm3] trend"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("black", "yellow", "black", "yellow", "yellow", "yellow", "black", "black"))+
+    ylab("Digital Biomass[mm3]_drought stress")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+```{r}
+
+
+png(file = paste(wd, "D.biomass_boxplot_only drought_2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+par(mgp=c(1,2.5,0),mar=c(20,10,5,20)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("difference of Digital Biomass [mm3] trend"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("red", "blue", "green", "magenta", "yellow", "black", "orange", "grey"))+
+    ylab("Digital Biomass[mm3]_drought stress")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+
+
+
+
+------------------------------------------------------- Leaf angle only for drought again
+
+```{r}
+
+colnames(genotypes_table[[1]])
+```
+
+
+
+```{r}
+
+diffList = list()
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(LAn)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    controlDates = controlDates[log1,]
+    droughtDates = droughtDates[log2,]
+
+    idx = order(controlDates$date)  # orderin the dates  for control situation
+    controlDates = controlDates[idx, ]
+    idx = order(droughtDates$date)
+    droughtDates = droughtDates[idx, ]
+    
+    diffVals = droughtDates$mean
+    genotypes = droughtDates$genotype
+    date = droughtDates$date
+    temp = data.frame(genotypes, date, diffVals)
+    diffList[[i]] = temp
+}
+```
+
+
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Leaf Angle_boxplot_only drought.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+      ggtitle(paste("Trends in Leaf Angle Response to Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("black", "yellow", "black", "yellow", "yellow", "yellow", "black", "black"))+
+    ylab("Leaf Angle[mm3]_drought stress")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+```{r}
+
+
+png(file = paste(wd, "Leaf Angle_boxplot_only drought_2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Trends in Leaf Angle Response to Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("red", "blue", "green", "magenta", "yellow", "black", "orange", "grey"))+
+    ylab("Leaf Angle[mm3]_drought stress")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+------------------------------------------------------- Leaf Inclination only for drought again
+
+```{r}
+
+colnames(genotypes_table[[1]])
+```
+
+
+
+```{r}
+
+diffList = list()
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(Lc)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    controlDates = controlDates[log1,]
+    droughtDates = droughtDates[log2,]
+
+    idx = order(controlDates$date)  # orderin the dates  for control situation
+    controlDates = controlDates[idx, ]
+    idx = order(droughtDates$date)
+    droughtDates = droughtDates[idx, ]
+    
+    diffVals = droughtDates$mean
+    genotypes = droughtDates$genotype
+    date = droughtDates$date
+    temp = data.frame(genotypes, date, diffVals)
+    diffList[[i]] = temp
+}
+```
+
+
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Leaf Inclinatiob_boxplot_only drought.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Leaf Inclination Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("black", "yellow", "black", "yellow", "yellow", "yellow", "black", "black"))+
+    ylab("Leaf Inclination")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Leaf Inclination_boxplot_only drought_2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Leaf Inclination Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("red", "blue", "green", "magenta", "yellow", "black", "orange", "grey"))+
+    ylab("Leaf Inclination")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+------------------------------------------------------- Light penetration depth only for drought again
+
+```{r}
+
+colnames(genotypes_table[[1]])
+```
+
+
+
+```{r}
+
+diffList = list()
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(LPD)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    controlDates = controlDates[log1,]
+    droughtDates = droughtDates[log2,]
+
+    idx = order(controlDates$date)  # orderin the dates  for control situation
+    controlDates = controlDates[idx, ]
+    idx = order(droughtDates$date)
+    droughtDates = droughtDates[idx, ]
+    
+    diffVals = droughtDates$mean
+    genotypes = droughtDates$genotype
+    date = droughtDates$date
+    temp = data.frame(genotypes, date, diffVals)
+    diffList[[i]] = temp
+}
+```
+
+
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Light penetration_boxplot_only drought2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Light Penetration Depth Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("black", "yellow", "black", "yellow", "yellow", "yellow", "black", "black"))+
+    ylab("LPD")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"))
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             #legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Light Penetration_boxplot_only drought_2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Light Penetration Depth Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("red", "blue", "green", "magenta", "yellow", "black", "orange", "grey"))+
+    ylab("LPD")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+------------------------------------------------------- Leaf Inclination only for drought again
+
+```{r}
+
+colnames(genotypes_table[[1]])
+```
+
+
+
+```{r}
+
+diffList = list()
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(Lc)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    controlDates = controlDates[log1,]
+    droughtDates = droughtDates[log2,]
+
+    idx = order(controlDates$date)  # orderin the dates  for control situation
+    controlDates = controlDates[idx, ]
+    idx = order(droughtDates$date)
+    droughtDates = droughtDates[idx, ]
+    
+    diffVals = droughtDates$mean
+    genotypes = droughtDates$genotype
+    date = droughtDates$date
+    temp = data.frame(genotypes, date, diffVals)
+    diffList[[i]] = temp
+}
+```
+
+
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Leaf Inclinatiob_boxplot_only drought.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Leaf Inclination Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("black", "yellow", "black", "yellow", "yellow", "yellow", "black", "black"))+
+    ylab("Leaf Inclination")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Leaf Inclination_boxplot_only drought_2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Leaf Inclination Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("red", "blue", "green", "magenta", "yellow", "black", "orange", "grey"))+
+    ylab("Leaf Inclination")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+------------------------------------------------------- Leaf Area depth only for drought again
+
+```{r}
+
+colnames(genotypes_table[[1]])
+```
+
+
+
+```{r}
+
+diffList = list()
+for(i in 1:length(genotypes_table)){
+    tempTable<- group_by(genotypes_table[[i]], genotype,treatment,date) %>%
+                summarise(mean=mean(LA)) %>%
+                arrange(desc(mean))
+    logic = tempTable$treatment == "control"
+    controlDates = tempTable[logic,]
+    droughtDates = tempTable[!logic,]
+    
+    log1 = is.element(controlDates$date, droughtDates$date)
+    log2 = is.element(droughtDates$date,controlDates$date)
+    
+    controlDates = controlDates[log1,]
+    droughtDates = droughtDates[log2,]
+
+    idx = order(controlDates$date)  # orderin the dates  for control situation
+    controlDates = controlDates[idx, ]
+    idx = order(droughtDates$date)
+    droughtDates = droughtDates[idx, ]
+    
+    diffVals = droughtDates$mean
+    genotypes = droughtDates$genotype
+    date = droughtDates$date
+    temp = data.frame(genotypes, date, diffVals)
+    diffList[[i]] = temp
+}
+```
+
+
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Leaf Area_boxplot_only drought.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Leaf Area Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("black", "yellow", "black", "yellow", "yellow", "yellow", "black", "black"))+
+    ylab("LA")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+
+
+```{r}
+
+
+png(file = paste(wd, "Leaf Area_boxplot_only drought_2.png", sep='/'),width=25,height=7,units="in",res=1200)
+fullFrame = data.frame()
+for(i in 1:length(diffList)){
+    fullFrame = rbind(fullFrame, diffList[[i]])
+}
+    
+#options(repr.plot.width=30, repr.plot.height=15)
+#par(mgp=c(1,2.5,0),mar=c(15,10,4,2)+0.1)
+    tempFigure= ggplot(fullFrame, aes(x=as.character(date), y=diffVals, color = genotypes)) + 
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme(text = element_text(size = 20)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+    ggtitle(paste("Leaf Area Changes Under Drought Stress"))+
+    geom_line(aes(group =genotypes), size=1) +
+    scale_color_manual( values = c("red", "blue", "green", "magenta", "yellow", "black", "orange", "grey"))+
+    ylab("LA")+
+    xlab("Dates")+
+#theme_bw()+
+      theme(plot.title = element_text(hjust=0.5, face="bold"),
+            # plot.background=element_rect(fill="#f7f7f7"),
+            # panel.grid.minor=element_blank(),
+            # panel.grid.major.y=element_blank(),
+            # panel.grid.major.x=element_line(),
+              #axis.ticks=element_blank(),
+             legend.position="top")
+             #panel.border=element_blank()
+    print(tempFigure)
+    dev.off()
+```
+
+#----------------------------------------------------------making for the groups and treatment under drought condition instead of the genotypes
+
+```{r}
+
+
+
+# Step 1: Load the data
+df <- mydata[mydata$treatment=="drought",] 
+df$Groups<- as.factor(df$Groups)
+
+# Step 2: Define columns to exclude (metadata)
+exclude_cols <- c("unit","g_alias","timestamp","time", "genotype", "treatment", "Groups", "date")
+
+# Step 3: Identify trait columns
+trait_cols <- setdiff(names(df), exclude_cols)
+
+# Step 4: Loop over traits and plot
+for (trait in trait_cols) {
+  
+  # Step 4a: Prepare data
+  plot_data <- df %>%
+    select(date, Groups, !!sym(trait)) %>%
+    filter(!is.na(date), !is.na(!!sym(trait))) %>%
+    group_by(date, Groups) %>%
+    summarise(mean_value = mean(!!sym(trait), na.rm = TRUE), .groups = "drop")
+  
+  # Step 4b: Plot
+
+  p <- ggplot(plot_data, aes(x = date, y = mean_value, color = Groups)) +
+    geom_line(size = 1.2) +
+     geom_line(aes(group =Groups), size=1) +
+   # geom_point(size = 2) +
+    scale_color_manual(values = c("High iWUE" = "skyblue3", "Low iWUE" = "hotpink1")) +
+    labs(
+      title = paste("Diferentiation of", trait, "under drought condition for iWUE groups"),
+      x = "Date",
+      y = paste( trait,"Mean"),
+      color = "iWUE Group"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+   legend.position = "top",               # put legend on top
+    legend.justification = "center",      # center the legend horizontally
+    legend.text = element_text(size = 8), # smaller legend text, default is ~11
+    legend.title = element_text(size = 9),# optional: smaller legend title
+    legend.key.size = unit(0.5, "cm"))     # optional: smaller legend keys
+  
+  print(p)  # Show the plot in your R session
+  
+  # Optional: Save each plot to file
+  #ggsave(paste0("trait_plot_", trait, ".png"), plot = p, width = 17, height = 7)
+    filename <- paste0("trait_plot_", trait, ".png")  # Change folder or add path if needed
+  
+  # Open PNG device
+  png(filename = filename, width = 15, height = 7, units = "in", res = 1200)
+  
+  print(p)  # Plot is printed to the PNG device
+  
+  dev.off() 
+}
+
+```
+#-------------------------------------------------------- again for only drought condition but specific bbch (60-92)
+
+```{r}
+
+
+
+# Step 1: Load the data
+df <- mydata[mydata$treatment=="drought",] 
+filtered_df <- df %>%
+  filter(date >= as.Date("2022-06-10") & date <= as.Date("2022-07-16"))
+filtered_df$Groups<- as.factor(filtered_df$Groups)
+
+# Step 2: Define columns to exclude (metadata)
+exclude_cols <- c("unit","g_alias","timestamp","time", "genotype", "treatment", "Groups", "date")
+
+# Step 3: Identify trait columns
+trait_cols <- setdiff(names(filtered_df), exclude_cols)
+
+# Step 4: Loop over traits and plot
+for (trait in trait_cols) {
+  
+  # Step 4a: Prepare data
+  plot_data <- filtered_df %>%
+    select(date, Groups, !!sym(trait)) %>%
+    filter(!is.na(date), !is.na(!!sym(trait))) %>%
+    group_by(date, Groups) %>%
+    summarise(mean_value = mean(!!sym(trait), na.rm = TRUE), .groups = "drop")
+  
+  # Step 4b: Plot
+
+  p <- ggplot(plot_data, aes(x = date, y = mean_value, color = Groups)) +
+    geom_line(size = 1.2) +
+     geom_line(aes(group =Groups), size=1) +
+   # geom_point(size = 2) +
+    scale_color_manual(values = c("High iWUE" = "turquoise2", "Low iWUE" = "indianred2")) +
+    labs(
+      title = paste("Diferentiation of", trait, "under drought condition for iWUE groups"),
+      x = "Date",
+      y = paste( trait,"Mean"),
+      color = "iWUE Group"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+   legend.position = "top",               # put legend on top
+    legend.justification = "center",      # center the legend horizontally
+    legend.text = element_text(size = 8), # smaller legend text, default is ~11
+    legend.title = element_text(size = 9),# optional: smaller legend title
+    legend.key.size = unit(0.5, "cm"))     # optional: smaller legend keys
+  
+  print(p)  # Show the plot in your R session
+  
+  # Optional: Save each plot to file
+  #ggsave(paste0("trait_plot_", trait, ".png"), plot = p, width = 17, height = 7)
+    filename <- paste0("trait_plot_", trait, "specific_bbch.png")  # Change folder or add path if needed
+  
+  # Open PNG device
+  png(filename = filename, width = 12, height = 7, units = "in", res = 1200)
+  
+  print(p)  # Plot is printed to the PNG device
+  
+  dev.off() 
+}
+
+```

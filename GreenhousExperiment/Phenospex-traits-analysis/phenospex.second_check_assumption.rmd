@@ -1,0 +1,1376 @@
+---
+title: "phenotypic trait-phenospex-real group- second check-assumption:as final decision: ART ANOVA for all the traits "
+author: "Sepideh"
+date: "2025-04-10"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  rmarkdown::html_document:
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    number_sections: yes
+editor_options:
+  chunk_output_type: inline
+  root.dir: "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenospex - dropped - second check-assumption"
+---
+
+```{r}
+library(tidyverse)
+library(hrbrthemes)
+library(viridis)
+library(readxl)
+library(lme4)
+library(viridis)
+library(afex)
+library(sjPlot)
+library(emmeans)
+library(performance)
+library(ggplot2)
+library(agricolae)
+library(dplyr)
+library(multcomp)
+library(multcompView)
+library(car)
+library(readr)
+library(ggpubr)
+library(tibble)
+library(flextable)
+library(openxlsx)
+library(stringr)
+library(rcompanion)
+library(gridExtra)
+library(rstatix)
+library(purrr)
+library(GGally)
+library(patchwork)
+set.seed(334)
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+wd="C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenospex - dropped - second check-assumption/Visuallization"
+```
+
+
+```{r}
+mydata<-read.table("cleaned_real_grouped_mydata.csv")
+```
+
+```{r}
+str(mydata)
+```
+
+# Digital Biomass 
+#### Digital Biomass is calculated as the product of height and 3D leaf area assuming that the plant has a regular body of which the volume can be computed by taking into account height and length.
+
+
+
+
+## check normality using shapiro test and variance homogenity using leven test
+
+
+
+```{r}
+
+
+# Load your dataset properly
+data <- read.table("cleaned_real_grouped_mydata.csv", stringsAsFactors = FALSE)
+
+# Convert categorical columns
+data$treatment <- as.factor(data$treatment)
+data$Groups <- as.factor(data$Groups)
+
+# Identify trait columns (all except metadata)
+trait_cols <- setdiff(colnames(data), c("unit", "genotype", "g_alias", "treatment", "timestamp", "Groups"))
+
+# Convert trait columns to numeric
+data[trait_cols] <- lapply(data[trait_cols], as.numeric)
+
+# Pivot the data longer for normality tests
+data_long <- data %>%
+  pivot_longer(cols = all_of(trait_cols), names_to = "Trait", values_to = "Value")
+
+# Shapiro-Wilk normality test for each Trait × treatment × Groups
+normality_results <- data_long %>%
+  group_by(Trait, treatment, Groups) %>%
+  summarise(
+    p_value = tryCatch(shapiro.test(Value)$p.value, error = function(e) NA),
+    .groups = "drop"
+  ) %>%
+  mutate(Normal = ifelse(p_value > 0.05, "Yes", "No"))
+
+# Print normality results
+print("Normality Test Results:")
+print(normality_results)
+
+# Levene's test for homogeneity of variance for each trait
+levene_results <- map_df(trait_cols, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Groups"))
+  test_result <- tryCatch(leveneTest(formula, data = data), error = function(e) NULL)
+
+  if (!is.null(test_result)) {
+    p_val <- test_result[1, "Pr(>F)"]
+    tibble(
+      Trait = trait,
+      p_value = p_val,
+      Homogeneous = ifelse(p_val > 0.05, "Yes", "No")
+    )
+  } else {
+    tibble(
+      Trait = trait,
+      p_value = NA,
+      Homogeneous = "Error"
+    )
+  }
+})
+
+
+print("Levene’s Test Results:")
+print(levene_results)
+
+
+
+#write.table(levene_results, "levenTest_ variance_homogenity_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+#write.table(normality_results, "Normality_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+# CHOICE OF ANALYSIS METHOD
+# Based on normality + variance + interaction
+
+# Suggestion logic:
+# - If most groups are normal and variances are homogeneous => use 2-way ANOVA
+# - If normality or variance assumptions are violated but you need interaction => use ART ANOVA
+# - If data is hierarchical or repeated (e.g. same genotype across replicates) => consider LMM
+
+# Example model using 2-way ANOVA (if assumptions OK)
+# anova_result <- aov(Biomass ~ treatment * Groups, data = data)
+# summary(anova_result)
+
+# Example model using ART ANOVA (if assumptions violated)
+# library(ARTool)
+# art_model <- art(Biomass ~ treatment * Groups, data = data)
+# anova(art_model)
+
+# Example LMM (if repeated measures or random effects like genotype)
+# lmm_model <- lmer(Biomass ~ treatment * Groups + (1|genotype), data = data)
+# summary(lmm_model)
+
+```
+
+## before using GLM data need to be check to see whether the traits are positively skewed or negatively
+```{r}
+library(e1071)
+numeric_cols <- sapply(data, is.numeric)
+skewness_values <- sapply(data[, numeric_cols], skewness, na.rm = TRUE)
+print(skewness_values)
+
+
+#Skewness > 0.5 indicates moderate to high positive skew, and log transformation can help.
+
+#If skewness is around 0 (between -0.5 and 0.5), the data is approximately symmetric.
+
+#Skewness < -0.5 suggests negative skew.
+traits <- c("Biomass","Height","M.Height","leaf_angle",
+            "LA","LAI","LAP","LIc","LPD")
+
+# create an empty data.frame to store skewness
+skew_tbl <- data.frame(
+  trait = traits,
+  skewness = NA_real_,
+  stringsAsFactors = FALSE
+)
+
+# loop through each trait
+for(i in seq_along(traits)) {
+  tr <- traits[i]
+  x  <- data[[tr]]
+  
+  # compute skewness
+  skew_tbl$skewness[i] <- skewness(x, na.rm = TRUE)
+  
+  # make a histogram + density
+  p1 <- ggplot(data, aes_string(x = tr)) +
+    geom_histogram(aes(y = ..density..), bins = 30, fill = "grey80", color = "black") +
+    geom_density() +
+    ggtitle(paste0(tr, " — skewness = ", round(skew_tbl$skewness[i], 2)))
+  
+  # make a Q–Q plot
+  p2 <- ggplot(data, aes_string(sample = tr)) +
+    stat_qq() +
+    stat_qq_line() +
+    ggtitle(paste0(tr, " — Q–Q plot"))
+  
+  # display side by side
+   p1 + p2
+}
+
+# at the end, print skewness table
+print(skew_tbl)
+
+print(p2[2])
+```
+
+
+#### Now we can apply GLM model
+```{r}
+
+
+library(dplyr)
+
+# Identify trait columns (all except metadata)
+trait_cols <- setdiff(colnames(data), c("unit", "genotype", "g_alias", "treatment", "timestamp", "Groups"))
+
+# Run GLM for each trait (with Gamma family for non-normal data)
+glm_results <- map_df(trait_cols, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Groups"))
+  tryCatch({
+    # Fit GLM model with Gamma family
+    glm_model <- glm(formula, data = data, family = Gamma(link = "log"))
+    
+    # Summary of the GLM model
+    glm_summary <- summary(glm_model)
+    
+    # Extract the ANOVA table for the GLM model
+    glm_aov <- anova(glm_model, test = "Chisq")
+    
+    tibble(
+      Trait = trait,
+      Term = rownames(glm_aov),
+      p_value = glm_aov$`Pr(>Chi)`,
+      Estimate = glm_summary$coefficients[, "Estimate"],  # Get the estimates (coefficients)
+      Std_Error = glm_summary$coefficients[, "Std. Error"]  # Get the standard errors
+    )
+  }, error = function(e) {
+    tibble(
+      Trait = trait,
+      Term = NA,
+      p_value = NA,
+      Estimate = NA,
+      Std_Error = NA
+    )
+  })
+})
+
+# Print GLM Results
+print("GLM Results:")
+print(glm_results)
+
+# Add stars to your GLM results for significance
+get_sig_stars <- function(p) {
+  if (is.na(p)) return("")
+  else if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else return("ns")
+}
+
+# Add significance stars to GLM results
+glm_results <- glm_results %>%
+  mutate(Significance = sapply(p_value, get_sig_stars))
+
+# View updated GLM table
+print(glm_results)
+
+
+# Optionally, write the results to a CSV file
+#write.table(glm_results, "GLM_results_interaction_gamma_family.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+```
+
+#selection of only sig traits
+
+```{r}
+
+
+# Read the CSV file (adjust the path if needed)
+glm_df <- read_csv("GLM_results_interaction_gamma_family.csv")
+
+# View the structure
+head(glm_df)
+
+# Filter for interaction terms
+interaction_df <- glm_df %>%
+  filter(Term == "treatment:Groups")
+
+# Find traits with significant interaction (p < 0.05)
+significant_interactions <- interaction_df %>%
+  filter(p_value < 0.05)
+
+# Print the results
+print(significant_interactions)
+
+```
+
+
+
+
+```{r}
+
+
+# Read your ART ANOVA results
+glm_data <- read_csv("GLM_results_interaction_gamma_family.csv")
+
+# Optional: Clean column names (if needed)
+names(glm_data)
+
+# Create a new column combining significance stars and p-values
+glm_data <- glm_data %>%
+  mutate(Sig_with_p = paste0(Significance, " (p = ", `p_value`, ")"))
+
+# Pivot the data: rows = Terms, columns = Traits, values = Sig_with_p
+summary_table <- glm_data %>%
+  select(Term, Trait, Sig_with_p) %>%
+  pivot_wider(names_from = Trait, values_from = Sig_with_p) %>%
+  arrange(match(Term, c("treatment", "Groups", "treatment:Groups")))
+
+# View the final table
+print(summary_table)
+
+# Optional: Write to CSV
+#write_csv(summary_table, "GLM_gamma_summary_table.csv")
+
+
+```
+
+
+
+
+```{r}
+glm_model <- glm(leaf_angle ~ Groups+treatment+Groups:treatment, data = data, quasipoisson(link = "log"))
+glm_aov <- anova(glm_model)
+glm_aov
+tab_model(glm_aov)
+
+data$Group_Treatment <- interaction(data$Groups, data$treatment)
+
+# Refit model with new factor
+glm_model2 <- glm(leaf_angle ~ Group_Treatment, data = data, quasipoisson(link = "log"))
+
+# Run emmeans and cld on that
+
+emm_combined <- emmeans(glm_model2, ~ Group_Treatment)
+
+# Tukey post hoc with proper letters
+
+tukey_result <- multcomp::cld(emm_combined, adjust = "tukey", Letters = letters)
+
+# View and use result
+print(tukey_result)
+ #write.table(tukey_result, "leaf_angle_tukey_result.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+
+summary_data<- group_by(data, treatment, Groups) %>%
+summarise(mean=mean(leaf_angle), sd=sd(leaf_angle)) %>%
+arrange(desc(mean))
+View(summary_data)
+
+
+summary_data$tukey<- tukey_result$.group
+summary_data
+
+png(file = paste(wd, "leaf_angle_GLM_gamma.png", sep='/'),width=9,height=8,units="in",res=1200)
+ggplot(mydata, aes(x=treatment, y=leaf_angle, fill=Groups) ) +
+    geom_boxplot(outlier.shape = NA) + # Boxplot without outlier points
+  #geom_jitter(color="black", size=0.4, alpha=0.9) + # Add jittered points
+ scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+geom_text(data=summary_data,aes(x=treatment, y=mean, label=tukey), position=position_dodge(0.8), vjust=-6, hjust=-0.5, size=6, colour="black")+
+#labs(x="Genotypes", y="Biomass[g]")+
+    scale_fill_brewer(palette = "Dark2")+
+#scale_fill_manual(values=c("turquoise4","maroon4","turquoise4","maroon4")) +
+
+
+theme(text = element_text(size = 18))+
+#ggtitle("Biomass difference for all lines")+
+theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position="top")+
+theme(axis.text.x = element_text(colour=c("black","black")),
+     axis.text.y= element_text(colour=c("black","black", "black","black")))+
+theme(text = element_text(size = 20))+
+   theme(axis.text.x =element_text(size = 20))+
+  theme(axis.text.y =element_text(size = 20))+
+   theme(legend.text = element_text(size = 18)) +
+#geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 4)+
+labs(x="Treatments", y="leaf_angle")
+dev.off()
+```
+
+
+```{r}
+glm_model <- glm(Biomass ~ Groups+treatment+Groups:treatment, data = data)
+glm_aov <- anova(glm_model)
+glm_aov
+tab_model(glm_aov)
+
+data$Group_Treatment <- interaction(data$Groups, data$treatment)
+head(data)
+
+# Refit model with new factor
+glm_model2 <- glm(Biomass~ Group_Treatment, data = data)
+
+# Run emmeans and cld on that
+
+emm_combined <- emmeans(glm_model2, ~ Group_Treatment)
+
+# Tukey post hoc with proper letters
+tukey_result <- multcomp::cld(emm_combined, adjust = "tukey", Letters = letters)
+
+# View and use result
+print(tukey_result)
+ #write.table(tukey_result, "leaf_angle_tukey_result.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+
+summary_data<- group_by(data, treatment, Groups) %>%
+summarise(mean=mean(Biomass), sd=sd(Biomass)) %>%
+arrange(desc(mean))
+View(summary_data)
+
+
+summary_data$tukey<- tukey_result$.group
+summary_data
+
+png(file = paste(wd, "Biomass_GLM_gamma.png", sep='/'),width=10,height=8,units="in",res=1200)
+ggplot(mydata, aes(x=treatment, y=Biomass, fill=Groups) ) +
+    geom_boxplot(outlier.shape = NA) + # Boxplot without outlier points
+  #geom_jitter(color="black", size=0.4, alpha=0.9) + # Add jittered points
+ scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+geom_text(data=summary_data,aes(x=treatment, y=mean, label=tukey), position=position_dodge(0.8), vjust=-10, hjust=-0.5, size=6, colour="black")+
+#labs(x="Genotypes", y="Biomass[g]")+
+    scale_fill_brewer(palette = "Dark2")+
+#scale_fill_manual(values=c("turquoise4","maroon4","turquoise4","maroon4")) +
+
+
+theme(text = element_text(size = 18))+
+#ggtitle("Biomass difference for all lines")+
+theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position="top")+
+theme(axis.text.x = element_text(colour=c("black","black")),
+     axis.text.y= element_text(colour=c("black","black", "black","black")))+
+theme(text = element_text(size = 20))+
+   theme(axis.text.x =element_text(size = 20))+
+  theme(axis.text.y =element_text(size = 20))+
+   theme(legend.text = element_text(size = 18)) +
+#geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 4)+
+labs(x="Treatments", y="Digital Biomass [mm3]")
+dev.off()
+```
+
+```{r}
+glm_model <- glm(LIc ~ Groups+treatment+Groups:treatment, data = data, quasipoisson(link = "log"))
+glm_aov <- anova(glm_model)
+glm_aov
+tab_model(glm_aov)
+
+data$Group_Treatment <- interaction(data$Groups, data$treatment)
+head(data)
+
+# Refit model with new factor
+glm_model2 <- glm(LIc~ Group_Treatment, data = data, quasipoisson(link = "log"))
+png(file = paste(wd, "model_check.png", sep='/'),width=18,height=15,units="in",res=1200)
+check_model(glm_model2)
+dev.off()
+# Run emmeans and cld on that
+
+emm_combined <- emmeans(glm_model2, ~ Group_Treatment)
+
+# Tukey post hoc with proper letters
+tukey_result <- cld(emm_combined, adjust = "tukey", Letters = letters)
+
+# View and use result
+print(tukey_result)
+ #write.table(tukey_result, "leaf_angle_tukey_result.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+
+summary_data<- group_by(data, treatment, Groups) %>%
+summarise(mean=mean(LIc), sd=sd(LIc)) %>%
+arrange(desc(mean))
+View(summary_data)
+
+
+summary_data$tukey<- tukey_result$.group
+summary_data
+
+png(file = paste(wd, "LIc_GLM_gamma.png", sep='/'),width=10,height=8,units="in",res=1200)
+ggplot(mydata, aes(x=treatment, y=LIc, fill=Groups) ) +
+    geom_boxplot(outlier.shape = NA) + # Boxplot without outlier points
+  #geom_jitter(color="black", size=0.4, alpha=0.9) + # Add jittered points
+ scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+geom_text(data=summary_data,aes(x=treatment, y=mean, label=tukey), position=position_dodge(0.8), vjust=-10, hjust=-0.5, size=6, colour="black")+
+#labs(x="Genotypes", y="Biomass[g]")+
+    scale_fill_brewer(palette = "Dark2")+
+#scale_fill_manual(values=c("turquoise4","maroon4","turquoise4","maroon4")) +
+
+
+theme(text = element_text(size = 18))+
+#ggtitle("Biomass difference for all lines")+
+theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position="top")+
+theme(axis.text.x = element_text(colour=c("black","black")),
+     axis.text.y= element_text(colour=c("black","black", "black","black")))+
+theme(text = element_text(size = 20))+
+   theme(axis.text.x =element_text(size = 20))+
+  theme(axis.text.y =element_text(size = 20))+
+   theme(legend.text = element_text(size = 18)) +
+#geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 4)+
+labs(x="Treatments", y="Leaf Inclination")
+dev.off()
+```
+
+
+
+```{r}
+glm_model <- glm(LAP ~ treatment*Groups, data = data, quasipoisson(link = "log"))
+glm_aov <- anova(glm_model)
+glm_aov
+tab_model(glm_aov)
+
+data$Group_Treatment <- interaction(data$Groups, data$treatment)
+head(data)
+
+# Refit model with new factor
+glm_model2 <- glm(LAP~ Group_Treatment, data = data, quasipoisson(link = "log"))
+
+# Run emmeans and cld on that
+
+emm_combined <- emmeans(glm_model2, ~ Group_Treatment)
+
+# Tukey post hoc with proper letters
+tukey_result <- cld(emm_combined, adjust = "tukey", Letters = letters)
+
+# View and use result
+print(tukey_result)
+ #write.table(tukey_result, "leaf_angle_tukey_result.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+
+summary_data<- group_by(data, treatment, Groups) %>%
+summarise(mean=mean(LAP), sd=sd(LAP)) %>%
+arrange(desc(mean))
+View(summary_data)
+
+
+summary_data$tukey<- tukey_result$.group
+summary_data
+
+png(file = paste(wd, "LAP_GLM_gamma.png", sep='/'),width=10,height=8,units="in",res=1200)
+ggplot(mydata, aes(x=treatment, y=LAP, fill=Groups) ) +
+    geom_boxplot(outlier.shape = NA) + # Boxplot without outlier points
+  #geom_jitter(color="black", size=0.4, alpha=0.9) + # Add jittered points
+ scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+geom_text(data=summary_data,aes(x=treatment, y=mean, label=tukey), position=position_dodge(0.8), vjust=-10, hjust=-0.5, size=6, colour="black")+
+#labs(x="Genotypes", y="Biomass[g]")+
+    scale_fill_brewer(palette = "Dark2")+
+#scale_fill_manual(values=c("turquoise4","maroon4","turquoise4","maroon4")) +
+
+
+theme(text = element_text(size = 18))+
+#ggtitle("Biomass difference for all lines")+
+theme_bw()+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(legend.position="top")+
+theme(axis.text.x = element_text(colour=c("black","black")),
+     axis.text.y= element_text(colour=c("black","black", "black","black")))+
+theme(text = element_text(size = 20))+
+   theme(axis.text.x =element_text(size = 20))+
+  theme(axis.text.y =element_text(size = 20))+
+   theme(legend.text = element_text(size = 18)) +
+#geom_text(aes(label=round(mean,2), y = 2), position = position_dodge(0.90), colour="black", size= 4)+
+labs(x="Treatments", y="Leaf Area Projection [mm2]")
+dev.off()
+```
+
+##-----------------------------------------------------------------------------------------
+### we ganna do the whole analysis for the maximum amount of the traits (rippening stage)
+
+
+
+```{r}
+
+potdata_or <- read.csv(file = "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenotypic_analysis_dropped_real_data - second_check_assumption/V22001_20221121_planteye.csv", sep =',', header=TRUE)
+potdata_or 
+#head(potdata_or)
+colnames(potdata_or)[15]
+```
+
+
+```{r}
+
+names(potdata_or)[6]<- "D.Biomass"
+names(potdata_or)[15]<- "Max.Height"
+names(potdata_or)[14]<- "Height"
+tail(potdata_or)
+#potdata_or[800:820, ]
+str(potdata_or)
+length(unique(potdata_or$unit))
+```
+```{r}
+logic = str_detect(potdata_or$unit, "[:digit:][:digit:][2479]")
+potdata_or = potdata_or[!logic,]
+```
+
+
+```{r}
+range(potdata_or$timestamp)
+```
+
+
+```{r}
+mydata<- potdata_or[potdata_or$timestamp >= "2022-04-29" & potdata_or$timestamp <= "2022-07-17",]
+range(mydata$timestamp)
+length(unique(mydata$unit))
+#mydata[14]
+#mydata[15]
+```
+
+```{r}
+png(file=paste(wd, "Digital biomass trend.png", sep="/"), width=28, height=12, units="in" ,res=1200)
+
+options(repr.plot.width=34, repr.plot.height=14)
+ggplot(mydata,aes(x=timestamp,y=D.Biomass,color=treatment))+
+  geom_line()+
+  geom_point(size=2)+
+ scale_color_manual(breaks = c("control", "drought"),
+                        values=c("blue", "red"))+
+  ylab('Digital biomass [mm³]')+
+  xlab('Timestamp')+
+  theme_minimal()
+dev.off()
+```
+```{r}
+png(file=paste(wd, "Digital biomass trend2.png", sep="/"), width=28, height=12, units="in" ,res=1200)
+
+#options(repr.plot.width=34, repr.plot.height=14)
+ggplot(mydata,aes(x=timestamp,y=D.Biomass,color=treatment))+
+  geom_line()+
+  geom_point(size=1)+
+ scale_color_manual(breaks = c("control", "drought"),
+                        values=c("darkgreen", "red"))+
+  ylab('Digital biomass [mm³]')+
+  xlab('Timestamp')+
+  theme_minimal()
+dev.off()
+```
+
+## selecting only the last date of 17.06 to have the maximum values of each trait and making comparison and analysis based on it
+## the max trait dosent work 
+
+```{r}
+mydata <- mydata %>%
+  separate(timestamp, into = c("Date", "Time"), sep = " ")
+
+
+mydata_f <- mydata[mydata$Date == "2022-06-17", ]
+View(mydata_f)
+length(unique(mydata_f$unit))
+length(unique(mydata_f$genotype))
+
+
+setdiff(mydata$unit, mydata_f$unit)
+
+## removing two genotypes
+mydata_ft <- mydata_f[!(mydata_f$genotype %in% c("BMW_2267", "BMW_2156")), ]
+```
+
+
+
+```{r}
+mydata_ft<- mydata_ft[, -c(1,3,6,8:14,17:23,30:50)]
+View(mydata_ft)
+
+high_genotype<- c("BMW_2007","BMW_2218","BMW_2364","2496")
+
+mydata_ft$Group<- ifelse(mydata_ft$genotype %in% high_genotype, "High", "Low")
+   
+                      
+colnames(mydata_ft)[7]<- "Leaf_Angle"  
+colnames(mydata_ft)[8]<- "LA"    
+colnames(mydata_ft)[9]<- "LAI"    
+colnames(mydata_ft)[10]<- "LAP"    
+colnames(mydata_ft)[11]<- "LIc"    
+colnames(mydata_ft)[12]<- "LPD"          
+
+
+
+write.table(mydata_ft, "maximum_date_all_traits.csv", sep=",", col.names = TRUE, row.names = FALSE)
+                         
+```
+
+model <- glm(Max.Height ~ treatment * group, data = your_data, family = gaussian)
+coeftest(model, vcov = vcovHC(model, type = "HC0"))
+
+Now we start to check the normality and homegenity for all the traits(saved files with MAX name)
+```{r}
+
+
+# Load your dataset properly
+data <- read.csv("maximum_date_all_traits.csv",header=TRUE, sep=",", check.names = FALSE)
+#data$Groups<- NULL
+
+# Convert categorical columns
+data$treatment <- as.factor(data$treatment)
+data$Group <- as.factor(data$Group)
+
+# Identify trait columns (all except metadata)
+trait_cols <- setdiff(colnames(data), c( "genotype", "treatment", "Date", "Group"))
+
+# Convert trait columns to numeric
+data[trait_cols] <- lapply(data[trait_cols], as.numeric)
+
+# Pivot the data longer for normality tests
+data_long <- data %>%
+  pivot_longer(cols = all_of(trait_cols), names_to = "Trait", values_to = "Value")
+
+# Shapiro-Wilk normality test for each Trait × treatment × Groups
+normality_results <- data_long %>%
+  group_by(Trait, treatment, Group) %>%
+  summarise(
+    p_value = tryCatch(shapiro.test(Value)$p.value, error = function(e) NA),
+    .groups = "drop"
+  ) %>%
+  mutate(Normal = ifelse(p_value > 0.05, "Yes", "No"))
+
+# Print normality results
+print("Normality Test Results:")
+print(normality_results)
+
+# Levene's test for homogeneity of variance for each trait
+levene_results <- map_df(trait_cols, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  test_result <- tryCatch(leveneTest(formula, data = data), error = function(e) NULL)
+
+  if (!is.null(test_result)) {
+    p_val <- test_result[1, "Pr(>F)"]
+    tibble(
+      Trait = trait,
+      p_value = p_val,
+      Homogeneous = ifelse(p_val > 0.05, "Yes", "No")
+    )
+  } else {
+    tibble(
+      Trait = trait,
+      p_value = NA,
+      Homogeneous = "Error"
+    )
+  }
+})
+
+
+print("Levene’s Test Results:")
+print(levene_results)
+
+
+
+#write.table(levene_results, "MAX_levenTest_ variance_homogenity_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+#write.table(normality_results, "MAX_Normality_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+```
+
+
+## all the traits follows the assumptions except D.Biomass. LA and LAI and thats why we run them with GLM. since they are normal but variance heterogenized we run GLM but applying error correction on it in two way.1: using coefficient correction and 2: robust ANOVA by applying white.adjust= TRUE..both methods are comarable the purposes are different (more explanation in .docx format)
+
+
+
+```{r}
+# Load required packages
+# Load required packages
+library(MASS)
+library(sandwich)
+library(broom)
+library(car)
+library(dplyr)
+
+# Your traits
+traits <- c("D.Biomass", "LA", "LAI")
+
+# Vectorized function to assign significance stars
+get_significance <- function(p) {
+  sapply(p, function(x) {
+    if      (is.na(x))    return("")
+    else if (x < 0.001)   return("***")
+    else if (x < 0.01)    return("**")
+    else if (x < 0.05)    return("*")
+    else if (x < 0.1)     return(".")
+    else                  return("")
+  })
+}
+
+# Placeholders for results
+coef_list  <- list()
+anova_list <- list()
+
+# ... (previous setup code remains the same)
+
+for (trait in traits) {
+  cat("\n===== Processing trait:", trait, "=====\n")
+  
+  # 1) Fit GLM
+  form   <- as.formula(paste(trait, "~ treatment * Group"))
+  m_glm  <- glm(form, data = data, family = gaussian(link = "identity"))
+  
+  # 2) Robust SEs for coefficients
+  vcov_rob   <- vcovHC(m_glm, type = "HC3")
+  coef_tidy  <- tidy(m_glm) %>%
+    mutate(
+      robust_se = sqrt(diag(vcov_rob)),
+      trait     = trait,
+      sig_coef  = get_significance(p.value)
+    ) %>%
+    select(trait, term, estimate, robust_se, std.error, statistic, p.value, sig_coef)
+  print(coef_tidy)
+  coef_list[[trait]] <- coef_tidy
+  
+  # 3) Robust ANOVA‐style F‐tests
+  anova_rob  <- Anova(m_glm, white.adjust = TRUE)
+  anova_tidy <- broom::tidy(anova_rob)
+  
+  # Inspect column names and then select only existing ones
+  print(colnames(anova_tidy))   # for your information
+  
+  anova_tidy <- anova_tidy %>%
+    mutate(
+      trait     = trait,
+      sig_anova = get_significance(p.value)
+    ) %>%
+    select(trait, term, df, statistic, p.value, sig_anova)
+  
+  print(anova_tidy)
+  anova_list[[trait]] <- anova_tidy
+}
+
+# 4) Combine results
+coef_all  <- bind_rows(coef_list)
+anova_all <- bind_rows(anova_list)
+
+# 5) Save to CSV
+write.csv(coef_all,  file = "GLM_RobustCoefficients_all_traits.csv", row.names = FALSE)
+write.csv(anova_all, file = "GLM_RobustANOVA_all_traits.csv",       row.names = FALSE)
+
+cat("\n\nDone! Two files created:\n",
+    " • MAX_GLM_RobustCoefficients_all_traits.csv\n",
+    " • MAX_GLM_RobustANOVA_all_traits.csv\n")
+
+```
+
+
+
+##for the rest of the traits while they meet the assumtions we apply standar two way ANOVA
+
+
+```{r}
+# Load required libraries
+library(broom)
+library(dplyr)
+
+# Define your traits
+traits <- c("Height", "Max.Height", "Leaf_Angle", "LAP", "LIc")
+
+# Helper function to assign significance levels
+get_significance <- function(p) {
+  ifelse(p < 0.001, "***",
+         ifelse(p < 0.01, "**",
+                ifelse(p < 0.05, "*",
+                       ifelse(p < 0.1, ".", ""))))
+}
+
+# Loop over each trait
+all_anova_results <- lapply(traits, function(trait) {
+  cat("===== Processing trait:", trait, "=====\n")
+  
+  # Create model formula
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  
+  # Fit standard linear model
+  model <- lm(formula, data = data)
+  
+  # Perform standard ANOVA
+  anova_res <- anova(model)
+  
+  # Tidy results
+  tidy_res <- broom::tidy(anova_res) %>%
+    mutate(term = rownames(anova_res),
+           trait = trait,
+           sig = get_significance(p.value)) %>%
+    select(trait, term, df, sumsq = sumsq, meansq = meansq, statistic, p.value, sig)
+  
+  return(tidy_res)
+})
+
+# Combine all trait results
+final_anova_summary <- do.call(rbind, all_anova_results)
+
+# Save to CSV
+write.csv(final_anova_summary, "MAX_Standard_ANOVA_results.csv", row.names = FALSE)
+
+
+```
+
+
+
+
+
+
+
+#--------------------------------------------------------------------
+#bbch 65-92:Now we repeat the whole analysis once more but instead of considerin all the time point or just focusing on the maximum we shrink or data from flowering stage (BBCH60) till end of the experiment like matrix correlation we made
+
+```{r}
+potdata_or <- read.csv(file = "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenospex - dropped - second check-assumption/V22001_20221121_planteye (1).csv", sep =',', header=TRUE)
+potdata_or 
+
+```
+
+```{r}
+logic = str_detect(potdata_or$unit, "[:digit:][:digit:][2479]")
+potdata_or = potdata_or[!logic,]
+```
+
+
+
+
+```{r}
+data_flower <- potdata_or %>%
+  separate(timestamp, into = c("Date", "Time"), sep = " ")
+
+data_flower<- data_flower[data_flower$Date >="2022-06-10" & data_flower$Date <= "2022-07-17",]
+data_flower<- data_flower[!(data_flower$genotype %in% c("BMW_2267", "BMW_2156")), ]
+
+```
+
+```{r}
+
+
+
+data_flower<- data_flower[, -c(1,3,6,8:14,17:23,30:50)]
+View(data_flower)
+
+high_genotype<- c("BMW_2007","BMW_2218","BMW_2364","2496")
+
+data_flower$Group<- ifelse(data_flower$genotype %in% high_genotype, "High iWUE", "Low iWUE")
+   
+   colnames(data_flower)[4]<- "D.Biomass"
+   colnames(data_flower)[5]<- "Height"
+   colnames(data_flower)[6]<- "Max.Height"
+colnames(data_flower)[7]<- "Leaf_Angle"  
+colnames(data_flower)[8]<- "LA"    
+
+colnames(data_flower)[9]<- "LAI"    
+colnames(data_flower)[10]<- "LAP"    
+colnames(data_flower)[11]<- "LIc"    
+colnames(data_flower)[12]<- "LPD"          
+
+
+
+#write.table(data_flower, "bbch_from_flowering_traits.csv", sep=",", col.names = TRUE, row.names = FALSE)
+```
+
+
+
+
+```{r}
+
+
+# Load your dataset properly
+data <- read.csv("bbch_from_flowering_traits.csv",header=TRUE, sep=",", check.names = FALSE)
+#data$Groups<- NULL
+
+# Convert categorical columns
+data$treatment <- as.factor(data$treatment)
+data$Group <- as.factor(data$Group)
+
+# Identify trait columns (all except metadata)
+trait_cols <- setdiff(colnames(data), c( "genotype", "treatment", "Date", "Group"))
+
+# Convert trait columns to numeric
+data[trait_cols] <- lapply(data[trait_cols], as.numeric)
+
+# Pivot the data longer for normality tests
+data_long <- data %>%
+  pivot_longer(cols = all_of(trait_cols), names_to = "Trait", values_to = "Value")
+
+# Shapiro-Wilk normality test for each Trait × treatment × Groups
+normality_results <- data_long %>%
+  group_by(Trait, treatment, Group) %>%
+  summarise(
+    p_value = tryCatch(shapiro.test(Value)$p.value, error = function(e) NA),
+    .groups = "drop"
+  ) %>%
+  mutate(Normal = ifelse(p_value > 0.05, "Yes", "No"))
+
+# Print normality results
+print("Normality Test Results:")
+print(normality_results)
+
+# Levene's test for homogeneity of variance for each trait
+levene_results <- map_df(trait_cols, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  test_result <- tryCatch(leveneTest(formula, data = data), error = function(e) NULL)
+
+  if (!is.null(test_result)) {
+    p_val <- test_result[1, "Pr(>F)"]
+    tibble(
+      Trait = trait,
+      p_value = p_val,
+      Homogeneous = ifelse(p_val > 0.05, "Yes", "No")
+    )
+  } else {
+    tibble(
+      Trait = trait,
+      p_value = NA,
+      Homogeneous = "Error"
+    )
+  }
+})
+
+
+print("Levene’s Test Results:")
+print(levene_results)
+
+
+
+#write.table(levene_results, "bbch60-92_levenTest_ variance_homogenity_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+#write.table(normality_results, "bbch60-92_Normality_results.csv", sep=",", row.names = FALSE, col.names = TRUE)
+```
+
+
+
+
+
+
+```{r}
+library(e1071)
+numeric_cols <- sapply(data, is.numeric)
+skewness_values <- sapply(data[, numeric_cols], skewness, na.rm = TRUE)
+print(skewness_values)
+
+
+
+```
+
+
+
+
+```{r}
+
+
+# Identify trait columns (all except metadata)
+trait_cols <- setdiff(colnames(data), c("genotype", "treatment", "Date", "Group"))
+
+# Run GLM for each trait (with Gamma family for non-normal data)
+glm_results <- map_df(trait_cols, function(trait) {
+  formula <- as.formula(paste(trait, "~ treatment * Group"))
+  tryCatch({
+    
+    # Choose the right family: Gamma for 'LIc' and 'D.Biomass', Gaussian otherwise
+    family_used <- if (trait %in% c("LIc", "D.Biomass")) {
+     Gamma()
+    } else {
+      gaussian()
+    }
+    # Fit GLM model with Gamma family
+    glm_model <- glm(formula, data = data, family = family_used)
+    
+    # Summary of the GLM model
+    glm_summary <- summary(glm_model)
+    
+    # Extract the ANOVA table for the GLM model
+    glm_aov <- anova(glm_model, test = "Chisq")
+    
+    tibble(
+      Trait = trait,
+      Term = rownames(glm_aov),
+      p_value = glm_aov$`Pr(>Chi)`,
+      Estimate = glm_summary$coefficients[, "Estimate"],  # Get the estimates (coefficients)
+      Std_Error = glm_summary$coefficients[, "Std. Error"]  # Get the standard errors
+    )
+  }, error = function(e) {
+    tibble(
+      Trait = trait,
+      Term = NA,
+      p_value = NA,
+      Estimate = NA,
+      Std_Error = NA
+    )
+  })
+})
+
+# Print GLM Results
+print("GLM Results:")
+print(glm_results)
+
+# Add stars to your GLM results for significance
+get_sig_stars <- function(p) {
+  if (is.na(p)) return("")
+  else if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else return("ns")
+}
+
+# Add significance stars to GLM results
+glm_results <- glm_results %>%
+  mutate(Significance = sapply(p_value, get_sig_stars))
+
+# View updated GLM table
+print(glm_results)
+
+
+# Optionally, write the results to a CSV file
+write.table(glm_results, "bbch60_90_GLM_results_interaction.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+```
+
+#Make a clean and tidy summary table
+
+```{r}
+
+
+# Read your ART ANOVA results
+glm_data <- read_csv("bbch60_90_GLM_results_interaction.csv")
+
+# Optional: Clean column names (if needed)
+names(glm_data)
+
+# Create a new column combining significance stars and p-values
+glm_data <- glm_data %>%
+  mutate(Sig_with_p = paste0(Significance, " (p = ", `p_value`, ")"))
+
+# Pivot the data: rows = Terms, columns = Traits, values = Sig_with_p
+summary_table <- glm_data %>%
+  select(Term, Trait, Sig_with_p) %>%
+  pivot_wider(names_from = Trait, values_from = Sig_with_p) %>%
+  arrange(match(Term, c("treatment", "Groups", "treatment:Groups")))
+
+# View the final table
+print(summary_table)
+
+# Optional: Write to CSV
+write_csv(summary_table, "bbch60_90_GLM_summary_table.csv")
+
+
+```
+
+
+
+```{r}
+#traits <- c("D.Biomass", "LIc")
+
+
+# Function to analyze one trait
+analyze_trait <- function(data, trait, wd = getwd()) {
+  
+  # Print trait being analyzed
+  cat("\n\nAnalyzing trait:", trait, "\n")
+
+  # Build model formula dynamically
+  formula_glm <- as.formula(paste(trait, "~ treatment * Group"))
+  
+  # Fit GLM
+  glm_model <- glm(formula_glm, data = data, family = Gamma(link = "log"))
+  glm_aov <- anova(glm_model)
+  print(glm_aov)
+  tab_model(glm_model)
+  
+  # Create combined factor for group + treatment
+  data$Group_Treatment <- interaction(data$Group, data$treatment)
+  
+  # Refit with combined interaction as predictor
+  formula_glm2 <- as.formula(paste(trait, "~ Group_Treatment"))
+  glm_model2 <- glm(formula_glm2, data = data, family = Gamma(link = "log"))
+  
+  # Estimated marginal means
+  emm_combined <- emmeans(glm_model2, ~ Group_Treatment)
+  
+  # Tukey post hoc with compact letter display
+  tukey_result <- cld(emm_combined, adjust = "tukey", Letters = letters)
+  
+  # Reorganize Tukey results
+  tukey_result_rev <- tukey_result %>%
+    as.data.frame() %>%
+    arrange(desc(emmean)) %>%
+    mutate(tukey = letters[match(.group, unique(.group))])
+  
+  # Summarize means and SD
+  summary_data <- data %>%
+    group_by(treatment, Group) %>%
+    summarise(mean = mean(.data[[trait]], na.rm = TRUE),
+              sd = sd(.data[[trait]], na.rm = TRUE),
+              .groups = 'drop') %>%
+    arrange(desc(mean))
+  
+  # Add Tukey letters to summary table
+  summary_data$tukey <- tukey_result_rev$tukey
+  
+#high_genotype<- c("BMW_2007","BMW_2218","BMW_2364","2496")
+
+#data$Group<- ifelse(data$genotype %in% high_genotype, "High iWUE", "Low iWUE")
+  
+  # Create plot
+  p <- ggplot(data, aes_string(x = "treatment", y = trait, fill = "Group")) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(color = "black", size = 0.4, alpha = 0.8,
+                position = position_jitterdodge(jitter.width = 0.25, dodge.width = 0.75)) +
+    geom_text(data = summary_data, aes(x = treatment, y = mean, label = tukey),
+              position = position_dodge(0.8), vjust = -7, hjust = -3.25,
+              size = 5, colour = "orangered2",fontface = "bold" ) +
+   #scale_fill_manual(values = c("High iWUE" = "steelblue4", "Low iWUE" = "cadetblue2"))+
+   # scale_fill_manual(values = c("High WUE" = "steelblue4", "Low WUE" = "cadetblue2")) +
+   
+    
+    scale_fill_manual(values=c("deepskyblue4","cadetblue2","deepskyblue4","cadetblue2")) +
+ 
+    labs(fill = "Groups", x = "Treatments", y = trait) +
+    theme_bw() +
+    theme(text = element_text(size = 18),
+          axis.text = element_text(color = "black", size = 18),
+          legend.position = "top",
+          legend.text = element_text(size = 16),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+
+  print(p)
+
+  # Save plot
+  ggsave(filename = paste0(wd, "/", gsub("[.]", "_", trait), "_bbch60_90_GLM_Plot.png"),
+         plot = p, width = 10, height = 7, units = "in", dpi = 300)
+  
+  # Return outputs
+  return(list(model = glm_model2, emmeans = emm_combined,
+              tukey = tukey_result_rev, summary = summary_data))
+}
+
+# Define the traits to analyze
+traits <- c("D.Biomass", "LIc")
+
+# Run analysis for each trait
+results_list <- lapply(traits, function(tr) analyze_trait(data, tr))
+names(results_list) <- traits
+
+#for(tr in 1:length(traits))
+#{
+#  results_list[tr] <- analyze_trait(data, traits[tr])
+  #names[tr] <- traits[tr]
+#}
+
+ # Plot must be printed inside png() device
+
+  dev.off() 
+
+```
+
+`
+
+
+```{r}
+#traits <- c("D.Biomass", "LIc")
+ #data$Group <- factor(data$Group, levels = c("High", "Low"),
+                     #labels = c("High iWUE", "Low iWUE"))
+#
+# Function to analyze one trait
+analyze_trait <- function(data, trait, wd = getwd()) {
+  
+  # Print trait being analyzed
+  cat("\n\nAnalyzing trait:", trait, "\n")
+
+  # Build model formula dynamically
+  formula_glm <- as.formula(paste(trait, "~ treatment * Group"))
+  
+  # Fit GLM
+  glm_model <- glm(formula_glm, data = data, family = gaussian())
+  glm_aov <- anova(glm_model)
+  print(glm_aov)
+  tab_model(glm_model)
+  
+  # Create combined factor for group + treatment
+  data$Group_Treatment <- interaction(data$Group, data$treatment)
+  
+  # Refit with combined interaction as predictor
+  formula_glm2 <- as.formula(paste(trait, "~ Group_Treatment"))
+  glm_model2 <- glm(formula_glm2, data = data, family = gaussian())
+  
+  # Estimated marginal means
+  emm_combined <- emmeans(glm_model2, ~ Group_Treatment)
+  
+  # Tukey post hoc with compact letter display
+  tukey_result <- cld(emm_combined, adjust = "tukey", Letters = letters)
+  
+  # Reorganize Tukey results
+  tukey_result_rev <- tukey_result %>%
+    as.data.frame() %>%
+    arrange(desc(emmean)) %>%
+    mutate(tukey = letters[match(.group, unique(.group))])
+  
+  # Summarize means and SD
+  summary_data <- data %>%
+    group_by(treatment, Group) %>%
+    summarise(mean = mean(.data[[trait]], na.rm = TRUE),
+              sd = sd(.data[[trait]], na.rm = TRUE),
+              .groups = 'drop') %>%
+    arrange(desc(mean))
+  
+  # Add Tukey letters to summary table
+  summary_data$tukey <- tukey_result_rev$tukey
+  
+  
+ 
+  # Create plot
+  p <- ggplot(data, aes_string(x = "treatment", y = trait, fill = "Group")) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(color = "black", size = 0.4, alpha = 0.8,
+                position = position_jitterdodge(jitter.width = 0.25, dodge.width = 0.75)) +
+    geom_text(data = summary_data, aes(x = treatment, y = mean, label = tukey),
+              position = position_dodge(0.8), vjust = -7, hjust = -3.25,
+              size = 5, colour = "orangered2",fontface = "bold") +
+   # scale_fill_brewer(palette = "Accent", labels = c("High iWUE", "Low iWUE")) +
+    
+    scale_fill_manual(values=c("deepskyblue4","cadetblue2","deepskyblue4","cadetblue2")) +
+    
+    #scale_fill_manual(values = c("High iWUE" = "steelblue4", "Low iWUE" = "cadetblue2"))+
+    labs(fill = "Groups", x = "Treatments", y = trait) +
+    theme_bw() +
+    theme(text = element_text(size = 18),
+          axis.text = element_text(color = "black", size = 18),
+          legend.position = "top",
+          legend.text = element_text(size = 16),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+
+  print(p)
+
+  # Save plot
+  ggsave(filename = paste0(wd, "/", gsub("[.]", "_", trait), "_bbch60_90_GLM_Plot.png"),
+         plot = p, width = 10, height = 7, units = "in", dpi = 300)
+  
+  # Return outputs
+  return(list(model = glm_model2, emmeans = emm_combined,
+              tukey = tukey_result_rev, summary = summary_data))
+}
+
+# Define the traits to analyze
+traits <- c("Leaf_Angle","LAP","LPD")
+
+# Run analysis for each trait
+results_list <- lapply(traits, function(tr) analyze_trait(data, tr))
+names(results_list) <- traits
+
+ # Plot must be printed inside png() device
+
+  dev.off() 
+
+```
+

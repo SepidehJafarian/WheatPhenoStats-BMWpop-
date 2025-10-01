@@ -1,0 +1,436 @@
+---
+title: "phenospex-regression-threshold-explanation"
+author: "Sepideh"
+date: "2025-03-24"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  rmarkdown::html_document:
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    number_sections: yes
+editor_options:
+  chunk_output_type: inline
+  root.dir: "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenospex - dropped - second check-assumption"
+---
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(lme4)
+library(emmeans)
+library(ggplot2)
+library(agricolae)
+library(dplyr)
+library(multcompView)
+library(car)
+library(readr)
+library(ggpubr)
+library(tibble)
+library(flextable)
+library(openxlsx)
+library(stringr)
+library(rstatix)
+library(GGally)
+library(magrittr)
+library(purrr)
+set.seed(844)
+```
+
+
+```{r}
+wd="C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/Phenospex - dropped - second check-assumption"
+mydata<- read.table("cleaned_phenospex(allgeno)_data.csv")
+View(mydata)
+mydata$genotype<- as.factor(mydata$genotype)
+mydata$treatment<- as.factor(mydata$treatment)
+colnames(mydata)
+length(unique(mydata$genotype))
+```
+
+```{r}
+unique(mydata$unit)
+length(unique(mydata$unit))
+logic = str_detect(mydata$unit, "128:1:1")
+mydata = mydata[!logic,]
+length(unique(mydata$unit))
+
+```
+
+```{r}
+logic = str_detect(mydata$unit, "223:1:1")
+mydata = mydata[!logic,]
+length(unique(mydata$unit))
+```
+
+```{r}
+logic = str_detect(mydata$unit, "220:1:1")
+mydata = mydata[!logic,]
+length(unique(mydata$unit))
+```
+
+```{r}
+
+head(mydata)
+mydata <- mydata[!(mydata$genotype %in% c("BMW_2156", "BMW_2267")), ]
+length(unique(mydata$genotype))
+unique(mydata$genotype)
+levels(mydata$genotype)
+mydata<- droplevels(mydata)
+mydata$timestamp<- as.character(mydata$timestamp)
+```
+
+
+# assigning new column (Groups)
+
+```{r}
+print(mydata)
+high_genotypes <- c("BMW_2218", "BMW_2007", "BMW_2364", "BMW_2496")
+mydata <- mydata %>%
+  mutate(Groups = ifelse(g_alias %in% high_genotypes, "High", "Low"))
+View(mydata)
+
+```
+
+
+# dividing timestamp column into separate ones (date and time)
+
+```{r}
+mydata<- mydata 
+ncols <- max(str_count(mydata$timestamp, " ")) + 1
+ncols
+mydata<-cbind(mydata, str_split_fixed(mydata$timestamp, " ", ncols))
+View(mydata)
+
+write.table(mydata, "final_data_dropped_regression.csv", sep=",", row.names=FALSE, col.names=TRUE)
+```
+
+
+
+```{r}
+names(mydata)[16]<- "date"
+names(mydata)[17]<- "time"
+names(mydata)[9]<- "LAn"
+names(mydata)[10]<- "LA"
+names(mydata)[11]<- "LAI"
+names(mydata)[12]<- "LAP"
+names(mydata)[13]<- "Lc"
+names(mydata)[14]<- "LPD"
+
+View(mydata)
+```
+
+####### making regression between the digital biomass or maxheight or average height
+
+# Compute regression results
+
+```{r}
+
+
+#regression_results <- mydata %>%
+ # group_by(genotype) %>%
+ # summarise(
+  #  slope = coef(lm(Height ~ Biomass, data = cur_data()))[2],
+  #  intercept = coef(lm(Height ~ Biomass, data = cur_data()))[1],
+  #  r2 = summary(lm(Height ~ Biomass, data = cur_data()))$r.squared
+ # )
+
+
+regression_results <- mydata %>%
+  group_by(genotype) %>%
+  summarise(
+    slope = coef(lm(log(Height) ~ Biomass, data = cur_data()))[2],
+    intercept = coef(lm(log(Height) ~ Biomass, data = cur_data()))[1],
+    r2 = summary(lm(log(Height) ~ Biomass, data = cur_data()))$r.squared
+  ) %>%
+  mutate(index = row_number())
+
+# Create an index column for proper y-positioning
+regression_results <- regression_results %>%
+  mutate(index = row_number())
+
+mydata$genotype <- as.character(mydata$genotype)
+# Plot
+#png(file = paste(wd, "Bimass-Height-regression.png", sep='/'),width=20,height=15,units="in",res=1200)
+ggplot(mydata, aes(x = Biomass, y = Height, color = genotype)) +
+  geom_point() +
+  # Here's the key: stat_smooth fits on log(Height) and transforms back with exp()
+  stat_smooth(
+    method = "loess", 
+    formula = y ~ x, 
+    aes(y = log(Height), x = Biomass, group = genotype), 
+    se = FALSE, 
+    method.args = list(), 
+    fullrange = TRUE,
+    linetype = "solid",
+    color = "black",
+    size = 1
+  ) +
+  scale_y_continuous(trans = "identity") +
+  labs(
+    title = "Exponential Regression of Biomass vs. Height",
+    x = "Digital Biomass [mm³]",
+    y = "Height [mm]",
+    color = "Genotype"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+#dev.off()
+```
+# --- after your stat_smooth() layer ---
+```{r}
+
+# Your regression_results (log‐linear fits)
+regression_results <- mydata %>%
+  group_by(genotype) %>%
+  summarise(
+    slope     = coef(lm(log(Height) ~ Biomass, data = cur_data()))[2],
+    intercept = coef(lm(log(Height) ~ Biomass, data = cur_data()))[1],
+    r2        = summary(lm(log(Height) ~ Biomass, data = cur_data()))$r.squared
+  ) %>%
+  mutate(index = row_number())
+
+mydata$genotype <- as.character(mydata$genotype)
+
+# Build the prediction curves
+prediction_curves <- regression_results %>%
+  group_by(genotype, slope, intercept) %>%
+  do({
+    bm_seq <- seq(
+      from = min(mydata$Biomass[mydata$genotype == .$genotype]),
+      to   = max(mydata$Biomass[mydata$genotype == .$genotype]),
+      length.out = 200
+    )
+    tibble(
+      genotype = .$genotype,
+      Biomass  = bm_seq,
+      Height   = exp(.$intercept + .$slope * bm_seq)
+    )
+  })
+
+# Plot: points + loess + exponential model curves
+ggplot(mydata, aes(x = Biomass, y =Height, color = genotype)) +
+  geom_point(alpha = 0.6) +
+  stat_smooth(
+    method      = "loess",
+    formula     = y ~ x,
+    aes(y = log(Height), x = Biomass, group = genotype),
+    se          = FALSE,
+    fullrange   = TRUE,
+    color       = "black",
+    size        = 0.5
+  ) +
+  geom_line(
+    data = prediction_curves,
+    aes(x = Biomass, y = Height, color = genotype),
+    size = 1
+  ) +
+  scale_y_continuous(trans = "identity") +
+  labs(
+    title = "Exponential Regression of Biomass vs. Height",
+    x     = "Digital Biomass [mm³]",
+    y     = "Height [mm]",
+    color = "Genotype"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+library(dplyr)
+library(ggplot2)
+
+# 1. Compute log-linear fits: log(Biomass) = intercept + slope * Height
+
+
+
+```{r}
+regression_results <- mydata %>%
+  group_by(genotype) %>%
+  summarise(
+    slope     = coef(lm(log(Biomass) ~ Height, data = cur_data()))[2],
+    intercept = coef(lm(log(Biomass) ~ Height, data = cur_data()))[1],
+    r2        = summary(lm(log(Biomass) ~ Height, data = cur_data()))$r.squared
+  ) %>%
+  ungroup()
+
+# 2. Build smooth prediction curves per genotype on swapped axes
+prediction_curves <- regression_results %>%
+  group_by(genotype, slope, intercept) %>%
+  do({
+    ht_seq <- seq(
+      from = min(mydata$Height[mydata$genotype == .$genotype]),
+      to   = max(mydata$Height[mydata$genotype == .$genotype]),
+      length.out = 200
+    )
+    tibble(
+      genotype = .$genotype,
+      Height   = ht_seq,
+      Biomass  = exp(.$intercept + .$slope * ht_seq)
+    )
+  }) %>%
+  ungroup()
+
+# 3. Plot with swapped axes
+#png(file = paste(wd, "Bimass-Height-regression2.png", sep='/'),width=20,height=15,units="in",res=1200)
+ggplot(mydata, aes(x = Height, y = Biomass, color = genotype)) +
+  geom_point(alpha = 0.6) +
+  
+  # optional: show a loess trend on the log scale
+  stat_smooth(
+    method    = "loess",
+    formula   = y ~ x,
+    aes(y = log(Biomass), x = Height, group = genotype),
+    se        = FALSE,
+    fullrange = TRUE,
+    color     = "black",
+    size      = 0.5
+  ) +
+  
+  # the true exponential model curves
+  geom_line(
+    data = prediction_curves,
+    aes(x = Height, y = Biomass, color = genotype),
+    size = 1
+  ) +
+  
+  scale_y_continuous(trans = "identity") +
+  labs(
+    title = "Exponential Regression per Genotype (swapped axes)",
+    x     = "Height [mm]",
+    y     = "Digital Biomass [mm³]",
+    color = "Genotype"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+#dev.off()
+
+```
+
+###saving the best reg graph
+
+```{r}
+regression_results <- mydata %>%
+  group_by(genotype) %>%
+  summarise(
+    slope     = coef(lm(log(Biomass) ~ Height, data = cur_data()))[2],
+    intercept = coef(lm(log(Biomass) ~ Height, data = cur_data()))[1],
+    r2        = summary(lm(log(Biomass) ~ Height, data = cur_data()))$r.squared
+  ) %>%
+  ungroup()
+
+# 2. Build smooth prediction curves per genotype on swapped axes
+prediction_curves <- regression_results %>%
+  group_by(genotype, slope, intercept) %>%
+  do({
+    ht_seq <- seq(
+      from = min(mydata$Height[mydata$genotype == .$genotype]),
+      to   = max(mydata$Height[mydata$genotype == .$genotype]),
+      length.out = 200
+    )
+    tibble(
+      genotype = .$genotype,
+      Height   = ht_seq,
+      Biomass  = exp(.$intercept + .$slope * ht_seq)
+    )
+  }) %>%
+  ungroup()
+
+# 3. Plot with swapped axes
+png(file = paste(wd, "Bimass-Height-regression2.png", sep='/'),width=20,height=15,units="in",res=1200)
+ggplot(mydata, aes(x = Height, y = Biomass, color = genotype)) +
+  geom_point(alpha = 0.6) +
+  
+  # optional: show a loess trend on the log scale
+  stat_smooth(
+    method    = "loess",
+    formula   = y ~ x,
+    aes(y = log(Biomass), x = Height, group = genotype),
+    se        = FALSE,
+    fullrange = TRUE,
+    color     = "black",
+    size      = 0.5
+  ) +
+  
+  # the true exponential model curves
+  geom_line(
+    data = prediction_curves,
+    aes(x = Height, y = Biomass, color = genotype),
+    size = 1
+  ) +
+  
+  scale_y_continuous(trans = "identity") +
+  labs(
+    title = "Exponential Regression per Genotype (swapped axes)",
+    x     = "Height [mm]",
+    y     = "Digital Biomass [mm³]",
+    color = "Genotype"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()
+```
+######...............................combination of both control and drought situation
+
+```{r}
+
+# Load data
+mydata <- read.csv("saved_mydata.csv")
+
+# 1. Calculate regression per genotype × treatment
+regression_results <- mydata %>%
+  group_by(genotype, treatment) %>%
+  summarise(
+    slope     = coef(lm(log(Biomass) ~ Height))[2],
+    intercept = coef(lm(log(Biomass) ~ Height))[1],
+    r2        = summary(lm(log(Biomass) ~ Height))$r.squared,
+    .groups = "drop"
+  )
+
+# 2. Generate prediction curves
+prediction_curves <- regression_results %>%
+  rowwise() %>%
+  do({
+    genotype_i  <- .$genotype
+    treatment_i <- .$treatment
+    subset_data <- mydata %>% filter(genotype == genotype_i, treatment == treatment_i)
+
+    ht_seq <- seq(
+      from = min(subset_data$Height),
+      to   = max(subset_data$Height),
+      length.out = 200
+    )
+
+    tibble(
+      genotype  = genotype_i,
+      treatment = treatment_i,
+      Height    = ht_seq,
+      Biomass   = exp(.$intercept + .$slope * ht_seq)
+    )
+  }) %>%
+  bind_rows()
+
+# 3. Plot
+png(file = paste(wd, "Bimass-Height-regression-both condition.png", sep='/'),width=20,height=15,units="in",res=1200)
+
+ggplot(mydata, aes(x = Height, y = Biomass, color = genotype)) +
+  geom_point(aes(shape = treatment), alpha = 0.5) +
+  geom_line(data = prediction_curves,
+            aes(x = Height, y = Biomass, color = genotype, linetype = treatment),
+            size = 1) +
+  scale_linetype_manual(values = c("control" = "solid", "drought" = "dashed")) +
+  labs(
+    title = "Exponential Regression of Biomass vs Height per Genotype",
+    x = "Height [mm]",
+    y = "Digital Biomass [mm³]",
+    color = "Genotype",
+    linetype = "Treatment",
+    shape = "Treatment"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()
+```
