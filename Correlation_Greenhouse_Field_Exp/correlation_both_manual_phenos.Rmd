@@ -1,0 +1,964 @@
+---
+title: "correlation_both_data set"
+author: "Sepideh"
+date: "2024-04-02"
+output: html_document
+toc: yes
+    toc_depth: '3'
+    df_print: paged
+  rmarkdown::html_document:
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    number_sections: yes
+editor_options:
+  chunk_output_type: inline
+  root.dir: "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/correlation_both_manual_phenos"
+---
+
+
+
+```{r}
+
+# List of packages to install
+packages <- c("tidyverse", "readxl", "lme4", "ggplot2", "agricolae", 
+              "dplyr", "multcompView", "car", "readr", "ggpubr", 
+              "tibble", "flextable", "readODS", "stringr", "rstatix", 
+              "knitr", "gridExtra", "GGally", "corrplot")
+
+# Install the packages
+install.packages(packages)
+
+
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(lme4)
+library(ggplot2)
+library(agricolae)
+library(dplyr)
+library(multcompView)
+library(car)
+library(readr)
+library(ggpubr)
+library(tibble)
+library(flextable)
+library(readODS)
+library(stringr)
+library(rstatix)
+library(knitr)
+library(gridExtra)
+library(GGally)
+library(corrplot)
+set.seed(275)
+```
+
+```{r}
+getwd()
+wd= "C:/Users/SepidehJafarian/Desktop/BMW-phenotypic_analysis_real_data analysis/correlation_both_manual_phenos"
+```
+
+```{r}
+Manual_data<- read.csv("final.data.allgen.csv", sep=",", header = TRUE)
+
+pheno_data<- read.csv("cleaned_real_grouped_mydata.csv", sep=" ", header=TRUE)
+
+# file without dropped genotypes of (2267, 2156)-- during merging those will be removed
+c13_data<- read.csv("isotope_each_samples_mean.csv", sep=",", header=TRUE) 
+```
+
+```{r}
+View(Manual_data) 
+View(pheno_data)
+c13_data
+```
+
+
+```{r}
+Manual_data[1]<- NULL
+Manual_data[,c(2,5,6) ]<- NULL
+str(Manual_data)
+Manual_data[, 4:17] <- lapply(Manual_data[, 4:17], as.numeric)
+str(Manual_data)
+Manual_data[, c(1,2,3,18)] <- lapply(Manual_data[, c(1,2,3,18)], as.factor)
+str(Manual_data)
+Manual_data <- Manual_data[!(Manual_data$IDs %in% c("2156", "2267")), ]
+Manual_data$IDs <- droplevels(Manual_data$IDs, exclude = c("2267", "2156"))
+
+
+Manual_data$IDs <- paste("BMW_", Manual_data$IDs, sep = "")
+Manual_data$treatment <- factor(Manual_data$treatment, levels = c("ww", "ds"), labels = c("control", "drought"))
+
+colnames(Manual_data)[1]<- "unit"
+colnames(Manual_data)[2]<- "genotype"
+```
+
+```{r}
+pheno_data_m <- pheno_data %>%
+  group_by(unit, genotype, treatment, Groups) %>%
+  summarize(across(where(is.numeric), mean, na.rm = TRUE))
+
+print(pheno_data_m)
+```
+```{r}
+ pheno_data_m[48, ]
+```
+
+```{r}
+pheno_data_m$unit <- sub(":1:1$", "", pheno_data_m$unit)
+
+pheno_data_m <- pheno_data_m[-48, ]
+colnames(pheno_data_m)[5]<- "digital_Biomass"
+colnames(pheno_data_m)[9]<- "LA (Leaf Area)"
+colnames(pheno_data_m)[10]<- "LAI (Leaf Area Index)"
+colnames(pheno_data_m)[11]<- "LAP (Leaf Area Projection)"
+colnames(pheno_data_m)[12]<- "LIc (Leaf Inclination)"
+colnames(pheno_data_m)[13]<- "LPD (Light Penetration Depth)"
+```
+
+
+```{r}
+merged_data<- inner_join(pheno_data_m, Manual_data, by=c("unit", "treatment", "genotype", "Groups"))
+str(merged_data)
+#write.table(merged_data ,"merged_pheno_manual_data.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+```
+
+
+
+
+correlation for all conditions
+```{r}
+corr_all<- merged_data[,5:ncol(merged_data)]
+corr_all
+res<- cor(corr_all)
+
+```
+
+```{r}
+png(file = paste(wd, "correlation between all traits_ both condition.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+```{r}
+png(file = paste(wd, "correlation between all traits_ both condition_full.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res, type = "full", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+## only drought stress condition
+```{r}
+cor_d <- merged_data[merged_data$treatment=="drought", ]
+corr_d<- cor_d[, 5:ncol(cor_d)]
+res2<- cor(corr_d)
+
+
+```
+
+
+```{r}
+png(file = paste(wd, "correlation between all traits_ drought condition.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res2, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+```{r}
+png(file = paste(wd, "correlation between all traits_ drought condition_full.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res2, type = "full", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+## only control condition
+```{r}
+cor_c <- merged_data[merged_data$treatment=="control", ]
+corr_c<- cor_c[, 5:ncol(cor_c)]
+res3<- cor(corr_c)
+
+
+```
+
+```{r}
+png(file = paste(wd, "correlation between all traits_ control condition.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res3, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+```{r}
+png(file = paste(wd, "correlation between all traits_ control condition_full.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res3, type = "full", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+
+
+##merging the whole set with c13 mesearments
+```{r}
+head(merged_data)
+length(merged_data$unit)
+head
+length(c13_data$SampleName)
+colnames(c13_data)[1]<- "unit"
+c13_data$unit<- sub("^BMW_", "",c13_data$unit)
+```
+
+```{r}
+merged_data_full <- merge(merged_data, c13_data, by="unit")
+View(merged_data_full)
+names(merged_data_full)[colnames(merged_data_full)== "mean"]<- "d13C"
+
+```
+
+```{r}
+merged_data_full_cor<- merged_data_full[,5:ncol(merged_data_full)]
+res4<-cor(merged_data_full_cor)
+
+```
+# Making new correlation inclusing c13 values
+```{r}
+
+png(file = paste(wd, "correlation between all traits_c13.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res4, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+```{r}
+
+png(file = paste(wd, "correlation between all traits_c13_full.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res4, type = "full", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+##merged-only drought
+
+```{r}
+cor_d_full <- merged_data_full[merged_data_full$treatment=="drought", ]
+corr_d_full<- cor_d_full[, 5:ncol(cor_d_full)]
+res5<- cor(corr_d_full)
+
+
+```
+
+
+```{r}
+png(file = paste(wd, "correlation between all traits_c13_drought.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res5, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+```{r}
+png(file = paste(wd, "correlation between all traits_c13_drought_full.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res5, type = "full", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+##merged only control
+```{r}
+cor_c_full <- merged_data_full[merged_data_full$treatment=="control", ]
+corr_c_full<- cor_c_full[, 5:ncol(cor_c_full)]
+res6<- cor(corr_c_full)
+
+
+```
+
+
+```{r}
+png(file = paste(wd, "correlation between all traits_c13_control.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res6, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+```{r}
+png(file = paste(wd, "correlation between all traits_c13_control_full.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res6, type = "full", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+
+dev.off()
+```
+
+
+
+
+# subset from full merged dat and selection of importants traits + calculation of CID
+
+```{r}
+
+str(merged_data_full)
+sub_merged_data_full<- merged_data_full[, c(1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,19,22,27,28 )]
+str(sub_merged_data_full)
+
+```
+
+## CID calculation
+```{r pressure, echo=FALSE}
+library(isocalcR)
+CID<- d13C.to.D13C(d13C.plant = sub_merged_data_full$d13C, year = 2022)
+CID
+```
+
+
+## WUE calculation
+```{r pressure, echo=FALSE}
+iWUE<- d13C.to.iWUE(d13C.plant = sub_merged_data_full$d13C, 
+             year = 2022, 
+             elevation = 496, 
+             temp = 19.67) 
+iWUE
+```
+
+## adding iWUE and CID as new column to my data frame
+
+
+```{r pressure, echo=FALSE}
+sub_merged_data_full$CID <- CID
+sub_merged_data_full$iWUE <- iWUE
+
+View(sub_merged_data_full)
+#write.table(sub_merged_data_full, "merged_both_dataset_WUE_CID.csv", sep=",", row.names = FALSE, col.names = TRUE)
+```
+
+
+
+## making new correlation based on the new data set
+
+
+
+```{r pressure, echo=FALSE}
+sub_merged_data_full_cor<- sub_merged_data_full[,5:ncol(sub_merged_data_full)]
+res10<- cor(sub_merged_data_full_cor)
+
+```
+
+```{r}
+png(file = paste(wd, "correlation between all traits_isotop factors.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res10, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+```{r}
+png(file = paste(wd, "correlation_no diag_all traits_isotop factors.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res10, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45, diag=FALSE)
+dev.off()
+```
+```{r pressure, echo=FALSE}
+sub_merged_data_full_d_cor <- sub_merged_data_full[sub_merged_data_full$treatment=="drought", ]
+sub_merged_data_full_d_cor <- sub_merged_data_full_d_cor[, 5:ncol(sub_merged_data_full_d_cor)] 
+res11<- cor(sub_merged_data_full_d_cor)
+```
+
+
+
+```{r}
+png(file = paste(wd, "correlation between all traits_isotop factors_drought.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res11, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+
+```{r}
+png(file = paste(wd, "correlation_no diag_all traits_isotop factors_drought.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res11, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45, diag=FALSE)
+dev.off()
+```
+
+
+
+```{r pressure, echo=FALSE}
+sub_merged_data_full_c_cor <- sub_merged_data_full[sub_merged_data_full$treatment=="control", ]
+sub_merged_data_full_c_cor <- sub_merged_data_full_c_cor[, 5:ncol(sub_merged_data_full_c_cor)] 
+res12<- cor(sub_merged_data_full_c_cor)
+```
+
+
+
+```{r}
+png(file = paste(wd, "correlation between all traits_isotop factors_control.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res12, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+```{r}
+png(file = paste(wd, "correlation between all traits_isotop factors_control2.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res12, type = "lower", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+
+
+```{r}
+png(file = paste(wd, "correlation_no diag_all traits_isotop factors_control.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+options(repr.plot.width=13, repr.plot.height=7)
+corrplot(res12, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45, diag=FALSE)
+dev.off()
+```
+
+```{r}
+
+# Determine the order of the variables based on hierarchical clustering
+hc.order <- hclust(as.dist(1 - res11))$order
+
+# Reorder the columns and rows of the correlation matrix for stress condition
+res11_ordered <- res11[hc.order, hc.order]
+
+# Generate the correlation plot for stress condition
+png(file = paste(wd, "ordered_correlation_no diag_all traits_isotop factors_drought.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar=c(10,0,50,0))
+par(mar = c(10, 0, 50, 0))
+options(repr.plot.width = 13, repr.plot.height = 7)
+corrplot(res11_ordered, type = "upper", order = "original", 
+         tl.col = "black", tl.srt = 45,diag=FALSE)
+dev.off()
+# Reorder the columns and rows of the correlation matrix for control condition using the same order
+res12_ordered <- res12[hc.order, hc.order]
+
+# Generate the correlation plot for control condition
+png(file = paste(wd, "ordered_correlation_no diag_all traits_isotop factors_control.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar = c(10, 0, 50, 0))
+options(repr.plot.width = 13, repr.plot.height = 7)
+corrplot(res12_ordered, type = "upper", order = "original", 
+         tl.col = "black", tl.srt = 45,diag=FALSE)
+
+dev.off()
+
+```
+## combining both triangle 
+
+```{r}
+# Ensure both correlation matrices have the same order of columns and rows
+column_order <- colnames(sub_merged_data_full_d_cor)
+res11_ordered <- res11[column_order, column_order]
+res12_ordered <- res12[column_order, column_order]
+
+# Create a combined correlation matrix initialized to NA
+combined_matrix <- matrix(NA, nrow = ncol(res11_ordered), ncol = ncol(res11_ordered))
+rownames(combined_matrix) <- column_order
+colnames(combined_matrix) <- column_order
+
+# Fill the upper triangle with drought correlations
+combined_matrix[upper.tri(combined_matrix, diag = TRUE)] <- res11_ordered[upper.tri(res11_ordered, diag = TRUE)]
+
+# Fill the lower triangle with control correlations
+combined_matrix[lower.tri(combined_matrix, diag = TRUE)] <- res12_ordered[lower.tri(res12_ordered, diag = TRUE)]
+
+# Plot the combined correlation matrix
+png(file = paste(wd, "combination_no diag_all traits_isotop factors_control2.png", sep='/'),width=15,height=10,units="in",res=1200)
+par(mar = c(10, 10, 10, 10))
+options(repr.plot.width = 13, repr.plot.height = 7)
+corrplot(combined_matrix, type = "full", order = "original", 
+         tl.col = "black", tl.srt = 45, 
+        # addCoef.col = "black", # Add correlation coefficients
+         number.cex = 0.7, # Size of correlation coefficients
+         diag = FALSE, na.label = " ") #diag.col = "grey"#
+legend("topright", legend = "Upper Triangle: Drought Stress condition", 
+       col = "black", pch = 15, pt.cex = 2, cex = 0.9, bty = "u")
+
+legend("bottomleft", legend = "Lower Triangle: Control condition", 
+       col = "black", pch = 15, pt.cex = 2, cex = 0.9, bty = "u")
+
+#title(main = "Correlation Matrix between all the traits for both Drought and Control Conditions")
+dev.off()
+
+```
+
+
+
+
+
+## just for saving more data for WGCNA analysis (not related to correlation)
+
+
+
+```{r}
+
+str(merged_data_full)
+
+
+```
+
+## CID calculation
+```{r pressure, echo=FALSE}
+library(isocalcR)
+CID<- d13C.to.D13C(d13C.plant = merged_data_full$d13C, year = 2022)
+CID
+```
+
+
+## WUE calculation
+```{r pressure, echo=FALSE}
+iWUE<- d13C.to.iWUE(d13C.plant = merged_data_full$d13C, 
+             year = 2022, 
+             elevation = 496, 
+             temp = 17.22) 
+iWUE
+```
+
+```{r pressure, echo=FALSE}
+merged_data_full$CID <- CID
+merged_data_full$iWUE <- iWUE
+
+View(merged_data_full)
+write.table(merged_data_full, "merged_pheno_manual_isotope factors.csv", sep=",", row.names = FALSE, col.names = TRUE)
+write.table(merged_data_full[,c(1:4,28:ncol(merged_data_full))], "merged_pheno_manual_sum_iso_factors.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+```
+
+
+
+
+#-------------------------------------------------------------------------------------------
+## Correlation between the traints (automatically measured) from the BBCH60 (starting of the flowering time)
+
+
+```{r}
+View(pheno_data)
+```
+
+
+
+
+```{r}
+range(pheno_data$timestamp)
+```
+
+
+
+# splite the date column and selectinf the flowering time/ removing of 220 units due to the technical error
+
+```{r}
+
+# Split timestamp into two columns (Date and Time)
+pheno_data_specific<- pheno_data %>%
+  mutate(Date = as.Date(timestamp),    # Extract Date
+         Time = format(as.POSIXct(timestamp), "%H:%M:%S"))  # Extract Time
+
+# Filter the data from 10-06-2022 onward
+filtered_pheno_data <- pheno_data_specific %>%
+  filter(Date >= as.Date("2022-06-10"))
+
+# View the filtered dataframe
+print(filtered_pheno_data)
+View(filtered_pheno_data)
+dim(filtered_pheno_data)
+filtered_pheno_data <- filtered_pheno_data %>%
+  filter(unit != "220:1:1")
+dim(filtered_pheno_data)
+View(filtered_pheno_data)
+
+```
+
+
+
+##correlation for phenospex data (only) starting flowering stage
+
+
+```{r}
+filtered_pheno_data_cor<- filtered_pheno_data[, c(6:14)]
+res_filtered_pheno<- cor(filtered_pheno_data_cor)
+```
+
+```{r}
+png(file = paste(wd, "correlation_phenospex_traits_from_BBCH60.png", sep='/'),width=11,height=8,units="in",res=1200)
+#par(mar=c(10,0,50,0))
+options(repr.plot.width=11, repr.plot.height=8)
+corrplot(res_filtered_pheno, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+dev.off()
+```
+## grouping of time specific phenospex data to merge with manual ones for the overall correlation
+
+```{r}
+filtered_pheno_data$unit <- sub(":1:1$", "", filtered_pheno_data$unit)
+
+filtered_pheno_data_m <-filtered_pheno_data %>%
+  group_by(unit, genotype, treatment, Groups) %>%
+  summarize(across(where(is.numeric), mean, na.rm = TRUE))
+
+View(filtered_pheno_data_m )
+dim(filtered_pheno_data_m)
+
+
+```
+
+
+
+```{r}
+colnames(filtered_pheno_data_m)[5]<- "digital_Biomass"
+colnames(filtered_pheno_data_m)[9]<- "LA (Leaf Area)"
+colnames(filtered_pheno_data_m)[10]<- "LAI (Leaf Area Index)"
+colnames(filtered_pheno_data_m)[11]<- "LAP (Leaf Area Projection)"
+colnames(filtered_pheno_data_m)[12]<- "LIc (Leaf Inclination)"
+colnames(filtered_pheno_data_m)[13]<- "LPD (Light Penetration Depth)"
+```
+
+
+
+```{r}
+
+colnames(c13_data)[1]<- "unit"
+c13_data$unit<- sub("^BMW_", "",c13_data$unit)
+View(c13_data)
+merged_bb60_pheno<- inner_join(filtered_pheno_data_m, c13_data, by="unit")
+View(merged_bb60_pheno)
+names(merged_bb60_pheno)[colnames(merged_bb60_pheno)== "mean"]<- "d13C"
+#write.table(merged_data ,"merged_pheno_manual_data.csv", sep=",", row.names = FALSE, col.names = TRUE)
+```
+
+
+
+## CID calculation for phenospex trait (flowering time)
+```{r}
+library(isocalcR)
+CID<- d13C.to.D13C(d13C.plant = merged_bb60_pheno$d13C, year = 2022)
+CID
+```
+
+
+## WUE calculation for begining of the flowering till the end of growth cycle
+```{r}
+iWUE<- d13C.to.iWUE(d13C.plant =merged_bb60_pheno$d13C, 
+             year = 2022, 
+             elevation = 496, 
+             temp = 19.67) 
+iWUE
+```
+
+## adding iWUE and CID as new column to my data frame
+
+
+```{r}
+merged_bb60_pheno$CID <- CID
+merged_bb60_pheno$iWUE <- iWUE
+
+View(merged_bb60_pheno)
+colnames(merged_bb60_pheno)[6]<- "Average Height"
+colnames(merged_bb60_pheno)[7]<- "Max.Height"
+colnames(merged_bb60_pheno)[14]<- "d13c (carbon isotope composition"
+colnames(merged_bb60_pheno)[15]<- "CID (Carbon Isotope Discrimination"
+
+```
+
+
+## dividing the data set to two control and driught condition
+
+```{r}
+merged_bb60_pheno_drought<- merged_bb60_pheno[merged_bb60_pheno$treatment=="drought", ]
+merged_bb60_pheno_control<- merged_bb60_pheno[merged_bb60_pheno$treatment=="control", ]
+View(merged_bb60_pheno_drought)
+View(merged_bb60_pheno_control)
+```
+
+
+```{r}
+merged_bb60_pheno_drought_corr <- merged_bb60_pheno_drought[, 5:16]
+merged_bb60_pheno_control_corr <- merged_bb60_pheno_control[, 5:16]
+View(merged_bb60_pheno_drought_corr)
+View(merged_bb60_pheno_control_corr)
+```
+
+```{r}
+res_pheno_drought <-cor(merged_bb60_pheno_drought_corr)
+res_pheno_control <- cor(merged_bb60_pheno_control_corr)
+
+```
+
+
+# Reorder the columns and rows of the correlation matrix for control condition using the same order
+
+```{r}
+hc.order <- hclust(as.dist(1 - res_pheno_drought))$order
+View(hc.order)
+res_pheno_drought_ordered <- res_pheno_drought[hc.order, hc.order]
+res_pheno_control_ordered <- res_pheno_control[hc.order, hc.order]
+
+```
+
+
+
+```{r}
+# Ensure both correlation matrices have the same order of columns and rows
+column_order <- colnames(res_pheno_drought)
+res_pheno_drought_ordered  <- res_pheno_drought[column_order, column_order]
+res_pheno_control_ordered <-res_pheno_control[column_order, column_order]
+
+# Create a combined correlation matrix initialized to NA
+combined_matrix <- matrix(NA, nrow = ncol(res_pheno_drought_ordered ), ncol = ncol(res_pheno_drought_ordered ))
+rownames(combined_matrix) <- column_order
+colnames(combined_matrix) <- column_order
+
+# Fill the upper triangle with drought correlations
+combined_matrix[upper.tri(combined_matrix, diag = TRUE)] <-res_pheno_drought_ordered[upper.tri(res_pheno_drought_ordered, diag = TRUE)]
+
+# Fill the lower triangle with control correlations
+combined_matrix[lower.tri(combined_matrix, diag = TRUE)] <- res_pheno_control_ordered[lower.tri(res_pheno_control_ordered, diag = TRUE)]
+
+# Plot the combined correlation matrix
+png(file = paste(wd, "combination_pheno_bbch60.png", sep='/'),width=8,height=8,units="in",res=1200)
+#par(mar = c(10, 10, 10, 10))
+#options(repr.plot.width = 11, repr.plot.height = 5)
+corrplot(combined_matrix, type = "full", order = "original", 
+         tl.col = "black", tl.srt = 45, tl.cex=0.6, 
+         addCoef.col = "black", # Add correlation coefficients
+         number.cex = 0.5, # Size of correlation coefficients
+         diag = FALSE, na.label = " ",bg = "lavenderblush2") #diag.col = "grey"#
+legend("topright", legend = "Upper Triangle: Drought Stress condition", 
+       col = "black", pch = 15, pt.cex = 2, cex = 0.8, bty = "u")
+
+legend("bottomleft", legend = "Lower Triangle: Control condition", 
+       col = "black", pch = 15, pt.cex = 2, cex = 0.8, bty = "u")
+
+#title(main = "Correlation Matrix between all the traits for both Drought and Control Conditions")
+dev.off()
+
+```
+
+-------------------------------------------------------------------------------
+# corr of the combination of pheno and manual (but using flowerin time of phenospex)
+
+
+
+
+```{r}
+print(merged_bb60_pheno)
+print(Manual_data)
+Manual_data<- Manual_data[,-4]
+
+```
+
+
+
+
+# combination of both manual and phenos(flowering stage)
+
+
+```{r}
+M_P<- inner_join(merged_bb60_pheno,Manual_data, by=c("unit", "genotype", "treatment", "Groups") )
+View(M_P)
+```
+
+# removinh unnecessary columns
+
+```{r}
+final_M_P <- M_P[,-c(19,20,21,22,23,25,26,28)]
+View(final_M_P)
+```
+
+
+
+```{r}
+colnames(final_M_P)[6]<- "Average Height" 
+colnames(final_M_P)[17]<- "Dry Biomass" 
+colnames(final_M_P)[14]<- "d13c(carbon isotope composition" 
+colnames(final_M_P)[15]<- "CID(Carbon Isotope Discrimination)"
+colnames(final_M_P)[18]<- "Shoots Number"
+colnames(final_M_P)[20]<- "Number of the Poor Seeds"
+
+```
+
+
+
+
+```{r}
+final_M_P_D<- final_M_P[final_M_P$treatment=="drought", ]
+final_M_P_C<- final_M_P[final_M_P$treatment=="control", ]
+View(final_M_P_D)
+View(final_M_P_C)
+```
+
+
+
+
+```{r}
+final_M_P_D_corr <- final_M_P_D[, 5:21]
+final_M_P_C_corr <- final_M_P_C[, 5:21]
+View(final_M_P_D_corr)
+View(final_M_P_C_corr)
+```
+
+
+
+```{r}
+res_M_P_D <-cor(final_M_P_D_corr)
+res_M_P_C <- cor(final_M_P_C_corr)
+
+```
+
+
+```{r}
+hc.order <- hclust(as.dist(1 - res_M_P_D))$order
+View(hc.order)
+res_M_P_D_ordered <-res_M_P_D[hc.order, hc.order]
+res_M_P_C_ordered <- res_M_P_C [hc.order, hc.order]
+
+```
+
+```{r}
+# Ensure both correlation matrices have the same order of columns and rows
+column_order <- colnames(res_M_P_D)
+res_M_P_D_ordered  <- res_M_P_D[column_order, column_order]
+res_M_P_C_ordered <- res_M_P_C [column_order, column_order]
+
+# Create a combined correlation matrix initialized to NA
+combined_matrix <- matrix(NA, nrow = ncol(res_M_P_D_ordered ), ncol = ncol(res_M_P_D_ordered))
+rownames(combined_matrix) <- column_order
+colnames(combined_matrix) <- column_order
+
+# Fill the upper triangle with drought correlations
+combined_matrix[upper.tri(combined_matrix, diag = TRUE)] <-res_M_P_D_ordered[upper.tri(res_M_P_D_ordered, diag = TRUE)]
+
+# Fill the lower triangle with control correlations
+combined_matrix[lower.tri(combined_matrix, diag = TRUE)] <- res_M_P_C_ordered[lower.tri(res_M_P_C_ordered, diag = TRUE)]
+
+# Plot the combined correlation matrix
+png(file = paste(wd, "combination_p_M_bbch60.png", sep='/'),width=9,height=8,units="in",res=1200)
+#par(mar = c(10, 10, 10, 10))
+#options(repr.plot.width = 11, repr.plot.height = 5)
+corrplot(combined_matrix, type = "full", order = "original", 
+         tl.col = "black", tl.srt = 45, tl.cex = 0.6, 
+         addCoef.col = "black", # Add correlation coefficients
+         number.cex = 0.5, # Size of correlation coefficients
+         diag = FALSE, na.label = " ",bg = "lavenderblush") #diag.col = "grey"#
+legend("topright", legend = "Upper Triangle: Drought Stress condition", 
+       col = "black", pch = 15, pt.cex = 2, cex = 0.6, bty = "u")
+
+legend("bottomleft", legend = "Lower Triangle: Control condition", 
+       col = "black", pch = 15, pt.cex = 2, cex = 0.6, bty = "u")
+
+#title(main = "Correlation Matrix between all the traits for both Drought and Control Conditions")
+dev.off()
+
+```
+```{r}
+# Ensure both correlation matrices have the same order of columns and rows
+column_order <- colnames(res_M_P_D)
+res_M_P_D_ordered  <- res_M_P_D[column_order, column_order]
+res_M_P_C_ordered <- res_M_P_C [column_order, column_order]
+
+# Create a combined correlation matrix initialized to NA
+combined_matrix <- matrix(NA, nrow = ncol(res_M_P_D_ordered ), ncol = ncol(res_M_P_D_ordered))
+rownames(combined_matrix) <- column_order
+colnames(combined_matrix) <- column_order
+
+# Fill the upper triangle with drought correlations
+combined_matrix[upper.tri(combined_matrix, diag = TRUE)] <-res_M_P_D_ordered[upper.tri(res_M_P_D_ordered, diag = TRUE)]
+
+# Fill the lower triangle with control correlations
+combined_matrix[lower.tri(combined_matrix, diag = TRUE)] <- res_M_P_C_ordered[lower.tri(res_M_P_C_ordered, diag = TRUE)]
+
+# Plot the combined correlation matrix
+png(file = paste(wd, "combination_p_M_bbch60_2.png", sep='/'),width=9,height=8,units="in",res=1200)
+#par(mar = c(10, 10, 10, 10))
+#options(repr.plot.width = 11, repr.plot.height = 5)
+corrplot(combined_matrix, type = "full", order = "original", 
+         tl.col = "black", tl.srt = 45, tl.cex = 0.6, 
+         addCoef.col = "black", # Add correlation coefficients
+         number.cex = 0.5, # Size of correlation coefficients
+         diag = FALSE, na.label = " ",bg = "lavenderblush") #diag.col = "grey"#
+#egend("topright", legend = "Upper Triangle: Drought Stress condition", 
+      # col = "black", pch = 15, pt.cex = 2, cex = 0.6, bty = "u")
+
+#legend("bottomleft", legend = "Lower Triangle: Control condition", 
+     #  col = "black", pch = 15, pt.cex = 2, cex = 0.6, bty = "u")
+
+#title(main = "Correlation Matrix between all the traits for both Drought and Control Conditions")
+dev.off()
+
+```
+
+#------------------------------------------------------new visualization graph
+
+
+```{r}
+View(final_M_P_D_corr)
+View(final_M_P_C_corr)
+```
+
+
+```{r}
+```
+
+
+
+```{r}
+```
+
+
+
+```{r}
+```
+
+
+
+```{r}
+```
+
+
+
+```{r}
+```
+
+
+```{r}
+```
